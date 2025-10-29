@@ -3,6 +3,7 @@
 #include "Types.h"
 #include "Texture.h"
 #include "PixelFont.h"
+#include "ILayerAttachable.h"
 #include <vector>
 #include <memory>
 #include <string>
@@ -14,7 +15,7 @@ class IRenderer;
 // A bitmap buffer for direct pixel manipulation
 // Perfect for debug drawing, effects, minimaps, or retro "chunky pixel" graphics
 // Pixels are manipulated in RAM and uploaded to GPU as needed
-class PixelBuffer {
+class PixelBuffer : public ILayerAttachable {
 public:
     PixelBuffer(int width, int height);
     ~PixelBuffer() = default;
@@ -53,7 +54,10 @@ public:
 
     // Visibility
     void setVisible(bool visible) { visible_ = visible; }
-    bool isVisible() const { return visible_; }
+    bool isVisible() const override { return visible_; }
+
+    // ILayerAttachable interface
+    void render(IRenderer& renderer, const Vec2& layerOffset, float opacity) override;
 
     // Get underlying texture (for rendering)
     TexturePtr getTexture() const { return texture_; }

@@ -3,6 +3,7 @@
 #include "engine/Logger.h"
 #include <nlohmann/json.hpp>
 #include <fstream>
+#include <sstream>
 
 using json = nlohmann::json;
 
@@ -509,12 +510,164 @@ void ResourceManager::clearPixelFonts() {
     pixelFonts_.clear();
 }
 
+// ============================================================================
+// Mesh3D Management
+// ============================================================================
+
+Mesh3DPtr ResourceManager::loadMesh3D(const std::string& name, const std::string& relativePath) {
+    // Check if already loaded
+    auto it = meshes_.find(name);
+    if (it != meshes_.end()) {
+        LOG_DEBUG_FMT("Mesh3D '%s' already loaded", name.c_str());
+        return it->second;
+    }
+
+    std::string fullPath = makeFullPath(relativePath);
+    LOG_INFO_FMT("Loading Mesh3D '%s' from '%s'", name.c_str(), fullPath.c_str());
+
+    // Create new mesh
+    auto mesh = std::make_shared<Mesh3D>();
+
+    // Open file
+    std::ifstream file(fullPath);
+    if (!file.is_open()) {
+        LOG_ERROR_FMT("Failed to open mesh file: %s", fullPath.c_str());
+        return nullptr;
+    }
+
+    std::vector<Vec3> vertices;
+    std::vector<Vec3> normals;
+    std::string line;
+    uint8_t nextColor = 1;  // Start with color 1 (color 0 is usually background)
+
+    while (std::getline(file, line)) {
+        // Skip empty lines and comments
+        if (line.empty() || line[0] == '#') {
+            continue;
+        }
+
+        std::istringstream iss(line);
+        std::string type;
+        iss >> type;
+
+        if (type == "v") {
+            // Vertex: v x y z
+            float x, y, z;
+            iss >> x >> y >> z;
+            vertices.push_back(Vec3(x, y, z));
+        }
+        else if (type == "vn") {
+            // Normal: vn x y z
+            float x, y, z;
+            iss >> x >> y >> z;
+            normals.push_back(Vec3(x, y, z));
+        }
+        else if (type == "f") {
+            // Face: f v1 v2 v3 ...
+            // .obj vertices and normals are 1-indexed, we need 0-indexed
+            std::vector<int> faceIndices;
+            std::vector<int> normalIndices;
+            std::string vertexData;
+
+            while (iss >> vertexData) {
+                // Handle v, v/vt, v/vt/vn, v//vn formats
+                std::istringstream viss(vertexData);
+                int vertexIndex;
+                int textureIndex = -1;
+                int normalIndex = -1;
+                char slash;
+
+                viss >> vertexIndex;
+                // Convert from 1-indexed to 0-indexed
+                faceIndices.push_back(vertexIndex - 1);
+
+                // Parse texture and normal indices if present
+                if (viss >> slash) {
+                    // Check if there's a texture index
+                    if (viss.peek() != '/') {
+                        viss >> textureIndex;
+                    }
+
+                    // Check for normal index (after second slash)
+                    if (viss >> slash) {
+                        viss >> normalIndex;
+                        // Convert from 1-indexed to 0-indexed
+                        normalIndices.push_back(normalIndex - 1);
+                    }
+                }
+            }
+
+            if (faceIndices.size() >= 3) {
+                // Assign color based on face index (cycle through colors 1-7)
+                uint8_t color = nextColor;
+                nextColor = (nextColor % 7) + 1;
+
+                Polygon poly;
+                poly.vertices = faceIndices;
+                poly.color = color;
+
+                // Only add normal indices if we have them for all vertices
+                if (normalIndices.size() == faceIndices.size()) {
+                    poly.normals = normalIndices;
+                }
+
+                mesh->addPolygon(poly);
+            }
+        }
+    }
+
+    file.close();
+
+    // Add all vertices to mesh
+    for (const auto& v : vertices) {
+        mesh->addVertex(v);
+    }
+
+    // Add all normals to mesh
+    for (const auto& n : normals) {
+        mesh->addNormal(n);
+    }
+
+    LOG_INFO_FMT("Loaded Mesh3D '%s': %zu vertices, %zu normals, %zu polygons",
+                 name.c_str(), vertices.size(), normals.size(), mesh->getPolygons().size());
+
+    meshes_[name] = mesh;
+    return mesh;
+}
+
+Mesh3DPtr ResourceManager::getMesh3D(const std::string& name) {
+    auto it = meshes_.find(name);
+    if (it != meshes_.end()) {
+        return it->second;
+    }
+    LOG_WARNING_FMT("Mesh3D '%s' not found", name.c_str());
+    return nullptr;
+}
+
+bool ResourceManager::hasMesh3D(const std::string& name) const {
+    return meshes_.find(name) != meshes_.end();
+}
+
+void ResourceManager::unloadMesh3D(const std::string& name) {
+    auto it = meshes_.find(name);
+    if (it != meshes_.end()) {
+        LOG_DEBUG_FMT("Unloading Mesh3D '%s'", name.c_str());
+        meshes_.erase(it);
+    }
+}
+
+void ResourceManager::clearMeshes() {
+    LOG_DEBUG_FMT("Clearing %zu meshes", meshes_.size());
+    meshes_.clear();
+}
+
 void ResourceManager::clearAll() {
     clearTextures();
     clearFonts();
     clearTilemaps();
     clearPalettes();
     clearPixelFonts();
+    clearMeshes();
 }
 
 } // namespace Engine

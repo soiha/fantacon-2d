@@ -26,11 +26,11 @@ public:
     void clear() override;
     void present() override;
 
-    void renderSprite(const Sprite& sprite, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
-    void renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
-    void renderText(const Text& text, const Vec2& position) override;
-    void renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
-    void renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
+    void renderSprite(const Sprite& sprite, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
+    void renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
+    void renderText(const Text& text, const Vec2& position, float opacity = 1.0f) override;
+    void renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
+    void renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
 
     TexturePtr createStreamingTexture(int width, int height) override;
     void updateTexture(Texture& texture, const Color* pixels, int width, int height) override;
@@ -40,6 +40,10 @@ public:
     // GL-specific accessors
     SDL_Window* getWindow() const { return window_; }
     SDL_GLContext getGLContext() const { return glContext_; }
+
+    // Viewport dimensions
+    int getViewportWidth() const override { return windowWidth_; }
+    int getViewportHeight() const override { return windowHeight_; }
 
     // IndexedPixelBuffer GL-specific support
     unsigned int createIndexedTexture(int width, int height);
@@ -52,7 +56,7 @@ private:
     bool compileShaders();
     void renderQuad(unsigned int texture, const Vec2& position, const Vec2& size, float rotation = 0.0f);
     void renderIndexedQuad(unsigned int indexTexture, unsigned int paletteTexture,
-                          const Vec2& position, const Vec2& size);
+                          const Vec2& position, const Vec2& size, float opacity = 1.0f);
 
     SDL_Window* window_ = nullptr;
     SDL_GLContext glContext_ = nullptr;

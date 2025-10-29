@@ -2,12 +2,13 @@
 
 #include "Types.h"
 #include "Texture.h"
+#include "ILayerAttachable.h"
 #include <vector>
 #include <memory>
 
 namespace Engine {
 
-class Tilemap {
+class Tilemap : public ILayerAttachable {
 public:
     Tilemap(int width, int height, int tileWidth, int tileHeight);
 
@@ -41,7 +42,10 @@ public:
 
     // Visibility
     void setVisible(bool visible) { visible_ = visible; }
-    bool isVisible() const { return visible_; }
+    bool isVisible() const override { return visible_; }
+
+    // ILayerAttachable interface
+    void render(IRenderer& renderer, const Vec2& layerOffset, float opacity) override;
 
 private:
     int width_;          // in tiles

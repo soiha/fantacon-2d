@@ -5,6 +5,7 @@
 #include "Tilemap.h"
 #include "Palette.h"
 #include "PixelFont.h"
+#include "Mesh3D.h"
 #include <string>
 #include <unordered_map>
 #include <memory>
@@ -76,6 +77,12 @@ public:
     bool hasPixelFont(const std::string& name) const;
     void unloadPixelFont(const std::string& name);
 
+    // Mesh3D management
+    Mesh3DPtr loadMesh3D(const std::string& name, const std::string& relativePath);
+    Mesh3DPtr getMesh3D(const std::string& name);
+    bool hasMesh3D(const std::string& name) const;
+    void unloadMesh3D(const std::string& name);
+
     // LDtk integration
     // Load a tilemap layer from an LDtk level
     // Parameters:
@@ -97,6 +104,7 @@ public:
     void clearTilemaps();
     void clearPalettes();
     void clearPixelFonts();
+    void clearMeshes();
     void clearAll();
 
     // Statistics
@@ -105,6 +113,7 @@ public:
     size_t getTilemapCount() const { return tilemaps_.size(); }
     size_t getPaletteCount() const { return palettes_.size(); }
     size_t getPixelFontCount() const { return pixelFonts_.size(); }
+    size_t getMeshCount() const { return meshes_.size(); }
 
 private:
     std::string makeFullPath(const std::string& relativePath) const;
@@ -117,6 +126,7 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Tilemap>> tilemaps_;
     std::unordered_map<std::string, PalettePtr> palettes_;
     std::unordered_map<std::string, PixelFontPtr> pixelFonts_;
+    std::unordered_map<std::string, Mesh3DPtr> meshes_;
 };
 
 } // namespace Engine

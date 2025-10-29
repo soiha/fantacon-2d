@@ -2,11 +2,12 @@
 
 #include "Types.h"
 #include "Texture.h"
+#include "ILayerAttachable.h"
 #include <memory>
 
 namespace Engine {
 
-class Sprite : public std::enable_shared_from_this<Sprite> {
+class Sprite : public std::enable_shared_from_this<Sprite>, public ILayerAttachable {
 public:
     Sprite() = default;
     Sprite(TexturePtr texture, Vec2 position = {0, 0});
@@ -36,7 +37,10 @@ public:
 
     // Visibility
     void setVisible(bool visible) { visible_ = visible; }
-    bool isVisible() const { return visible_; }
+    bool isVisible() const override { return visible_; }
+
+    // ILayerAttachable interface
+    void render(IRenderer& renderer, const Vec2& layerOffset, float opacity) override;
 
     // Anchoring
     // Anchor this sprite to a parent sprite

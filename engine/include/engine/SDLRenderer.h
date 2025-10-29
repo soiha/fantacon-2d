@@ -25,11 +25,11 @@ public:
     void clear() override;
     void present() override;
 
-    void renderSprite(const Sprite& sprite, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
-    void renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
-    void renderText(const Text& text, const Vec2& position) override;
-    void renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
-    void renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}) override;
+    void renderSprite(const Sprite& sprite, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
+    void renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
+    void renderText(const Text& text, const Vec2& position, float opacity = 1.0f) override;
+    void renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
+    void renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset = Vec2{0.0f, 0.0f}, float opacity = 1.0f) override;
 
     TexturePtr createStreamingTexture(int width, int height) override;
     void updateTexture(Texture& texture, const Color* pixels, int width, int height) override;
@@ -40,9 +40,15 @@ public:
     SDL_Renderer* getSDLRenderer() const { return renderer_; }
     SDL_Window* getWindow() const { return window_; }
 
+    // Viewport dimensions
+    int getViewportWidth() const override { return windowWidth_; }
+    int getViewportHeight() const override { return windowHeight_; }
+
 private:
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
+    int windowWidth_ = 0;
+    int windowHeight_ = 0;
 };
 
 } // namespace Engine

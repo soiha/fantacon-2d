@@ -54,4 +54,11 @@ int Tilemap::getTileAtWorldPos(const Vec2& worldPos) const {
     return getTile(x, y);
 }
 
+void Tilemap::render(IRenderer& renderer, const Vec2& layerOffset, float opacity) {
+    if (!visible_) {
+        return;
+    }
+    renderer.renderTilemap(*this, layerOffset, opacity);
+}
+
 } // namespace Engine

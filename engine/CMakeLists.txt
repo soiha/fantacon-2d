@@ -31,6 +31,8 @@ set(ENGINE_SOURCES
     src/Palette.cpp
     src/PixelFont.cpp
     src/CharacterLayer.cpp
+    src/AttributedTextGrid.cpp
+    src/Mesh3D.cpp
     src/SDLRenderer.cpp
     src/GLRenderer.cpp
     src/Engine.cpp
@@ -120,3 +122,18 @@ add_executable(convert_c64_font examples/convert_c64_font.cpp)
 target_include_directories(convert_c64_font PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
 target_link_directories(convert_c64_font PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
 target_link_libraries(convert_c64_font PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
+
+add_executable(mesh_demo examples/mesh_demo.cpp)
+target_link_libraries(mesh_demo PRIVATE engine)
+
+add_executable(test_normals examples/test_normals.cpp)
+target_link_libraries(test_normals PRIVATE engine)
+
+add_executable(mesh_with_normals_demo examples/mesh_with_normals_demo.cpp)
+target_link_libraries(mesh_with_normals_demo PRIVATE engine)
+
+add_executable(text_grid_demo examples/text_grid_demo.cpp)
+target_link_libraries(text_grid_demo PRIVATE engine)
+
+add_executable(layer_transparency_demo examples/layer_transparency_demo.cpp)
+target_link_libraries(layer_transparency_demo PRIVATE engine)

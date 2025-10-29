@@ -482,11 +482,23 @@ public:
                 Vec3 p0 = transformed[v0Idx];
                 Vec3 p1 = transformed[v1Idx];
 
-                // Project to 2D (orthographic projection)
-                int x0 = centerX + static_cast<int>(p0.x);
-                int y0 = centerY + static_cast<int>(p0.y);
-                int x1 = centerX + static_cast<int>(p1.x);
-                int y1 = centerY + static_cast<int>(p1.y);
+                // Perspective projection
+                float focalLength = 200.0f;  // Camera distance
+                float cameraZ = 150.0f;      // Push objects away from camera
+
+                // Apply perspective division
+                float z0 = p0.z + cameraZ;
+                float z1 = p1.z + cameraZ;
+
+                // Avoid division by zero
+                if (z0 < 1.0f) z0 = 1.0f;
+                if (z1 < 1.0f) z1 = 1.0f;
+
+                // Project to 2D with perspective
+                int x0 = centerX + static_cast<int>((p0.x * focalLength) / z0);
+                int y0 = centerY + static_cast<int>((p0.y * focalLength) / z0);
+                int x1 = centerX + static_cast<int>((p1.x * focalLength) / z1);
+                int y1 = centerY + static_cast<int>((p1.y * focalLength) / z1);
 
                 vectorLayer_->drawLine(x0, y0, x1, y1, poly.color);
             }

@@ -64,4 +64,11 @@ void Sprite::clearParent() {
     parent_.reset();
 }
 
+void Sprite::render(IRenderer& renderer, const Vec2& layerOffset, float opacity) {
+    if (!visible_) {
+        return;
+    }
+    renderer.renderSprite(*this, layerOffset, opacity);
+}
+
 } // namespace Engine

@@ -57,6 +57,7 @@ in vec2 TexCoord;
 
 uniform sampler2D indexTexture;  // R8 texture with palette indices
 uniform sampler2D paletteTexture;  // 256x1 RGBA texture with palette
+uniform float opacity;  // Layer opacity (0.0 = fully transparent, 1.0 = fully opaque)
 
 void main() {
     // Sample the index from the indexed texture
@@ -67,7 +68,10 @@ void main() {
     // For pixel-perfect palette lookup, we need to hit the exact center of each palette entry
     float paletteIndex = index * 255.0;
     vec2 palCoord = vec2((paletteIndex + 0.5) / 256.0, 0.5);
-    FragColor = texture(paletteTexture, palCoord);
+    vec4 color = texture(paletteTexture, palCoord);
+
+    // Apply layer opacity to the alpha channel
+    FragColor = vec4(color.rgb, color.a * opacity);
 }
 )";
 
@@ -300,23 +304,23 @@ void GLRenderer::present() {
 }
 
 // Stub implementations for now - will implement these next
-void GLRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset) {
+void GLRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset, float opacity) {
     // TODO: Implement OpenGL sprite rendering
 }
 
-void GLRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset) {
+void GLRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset, float opacity) {
     // TODO: Implement OpenGL tilemap rendering
 }
 
-void GLRenderer::renderText(const Text& text, const Vec2& position) {
+void GLRenderer::renderText(const Text& text, const Vec2& position, float opacity) {
     // TODO: Implement OpenGL text rendering
 }
 
-void GLRenderer::renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset) {
+void GLRenderer::renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
     // TODO: Implement OpenGL pixel buffer rendering
 }
 
-void GLRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset) {
+void GLRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
     if (!buffer.isVisible()) {
         return;
     }
@@ -357,12 +361,13 @@ void GLRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, cons
     // Mark buffer as clean
     mutableBuffer.markClean();
 
-    // Render using the palette shader
+    // Render using the palette shader with opacity
     renderIndexedQuad(
         mutableBuffer.getGLIndexTexture(),
         mutableBuffer.getGLPaletteTexture(),
         buffer.getPosition() + layerOffset,
-        Vec2{buffer.getWidth() * buffer.getScale(), buffer.getHeight() * buffer.getScale()}
+        Vec2{buffer.getWidth() * buffer.getScale(), buffer.getHeight() * buffer.getScale()},
+        opacity
     );
 }
 
@@ -433,7 +438,7 @@ void GLRenderer::updatePaletteTexture(unsigned int textureId, const Color* palet
 }
 
 void GLRenderer::renderIndexedQuad(unsigned int indexTexture, unsigned int paletteTexture,
-                                   const Vec2& position, const Vec2& size) {
+                                   const Vec2& position, const Vec2& size, float opacity) {
     // Use the palette shader program
     glUseProgram(paletteShaderProgram_);
 
@@ -461,8 +466,10 @@ void GLRenderer::renderIndexedQuad(unsigned int indexTexture, unsigned int palet
     // Set uniforms
     int projLoc = glGetUniformLocation(paletteShaderProgram_, "projection");
     int modelLoc = glGetUniformLocation(paletteShaderProgram_, "model");
+    int opacityLoc = glGetUniformLocation(paletteShaderProgram_, "opacity");
     glUniformMatrix4fv(projLoc, 1, GL_FALSE, projection);
     glUniformMatrix4fv(modelLoc, 1, GL_FALSE, model);
+    glUniform1f(opacityLoc, opacity);
 
     // Bind textures
     glActiveTexture(GL_TEXTURE0);

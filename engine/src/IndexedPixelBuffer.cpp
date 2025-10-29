@@ -62,6 +62,82 @@ void IndexedPixelBuffer::drawLine(int x0, int y0, int x1, int y1, uint8_t palett
     }
 }
 
+void IndexedPixelBuffer::fillTriangle(int x0, int y0, int x1, int y1, int x2, int y2, uint8_t paletteIndex) {
+    // Sort vertices by Y coordinate (y0 <= y1 <= y2)
+    if (y1 < y0) { std::swap(x0, x1); std::swap(y0, y1); }
+    if (y2 < y0) { std::swap(x0, x2); std::swap(y0, y2); }
+    if (y2 < y1) { std::swap(x1, x2); std::swap(y1, y2); }
+
+    // Handle degenerate cases
+    if (y0 == y2) return;  // All vertices on same horizontal line
+
+    // Fill the triangle using scanline algorithm
+    auto fillScanline = [this, paletteIndex](int y, int x_start, int x_end) {
+        if (x_start > x_end) std::swap(x_start, x_end);
+        for (int x = x_start; x <= x_end; ++x) {
+            setPixel(x, y, paletteIndex);
+        }
+    };
+
+    // Interpolate X coordinates for each scanline
+    for (int y = y0; y <= y2; ++y) {
+        // Calculate X coordinates on the two edges at this Y
+        int x_a, x_b;
+
+        // Long edge (from y0 to y2)
+        if (y2 > y0) {
+            float t = static_cast<float>(y - y0) / (y2 - y0);
+            x_a = static_cast<int>(x0 + t * (x2 - x0));
+        } else {
+            x_a = x0;
+        }
+
+        // Short edge (either y0-y1 or y1-y2)
+        if (y < y1) {
+            // Top half: interpolate between y0 and y1
+            if (y1 > y0) {
+                float t = static_cast<float>(y - y0) / (y1 - y0);
+                x_b = static_cast<int>(x0 + t * (x1 - x0));
+            } else {
+                x_b = x0;
+            }
+        } else {
+            // Bottom half: interpolate between y1 and y2
+            if (y2 > y1) {
+                float t = static_cast<float>(y - y1) / (y2 - y1);
+                x_b = static_cast<int>(x1 + t * (x2 - x1));
+            } else {
+                x_b = x1;
+            }
+        }
+
+        fillScanline(y, x_a, x_b);
+    }
+}
+
+void IndexedPixelBuffer::fillRect(int x, int y, int width, int height, uint8_t paletteIndex) {
+    // Clamp rectangle to buffer bounds
+    int x1 = std::max(0, x);
+    int y1 = std::max(0, y);
+    int x2 = std::min(width_, x + width);
+    int y2 = std::min(height_, y + height);
+
+    // Nothing to draw if rectangle is completely out of bounds
+    if (x1 >= x2 || y1 >= y2) {
+        return;
+    }
+
+    // Optimized scanline-based fill (better cache locality than nested setPixel calls)
+    for (int row = y1; row < y2; ++row) {
+        // Direct memory access for the entire row span
+        int offset = row * width_ + x1;
+        int count = x2 - x1;
+        std::fill_n(&pixels_[offset], count, paletteIndex);
+    }
+
+    markPixelsDirty();
+}
+
 void IndexedPixelBuffer::clear(uint8_t paletteIndex) {
     std::fill(pixels_.begin(), pixels_.end(), paletteIndex);
     markPixelsDirty();
@@ -375,6 +451,13 @@ void IndexedPixelBuffer::upload(IRenderer& renderer) {
     // Update texture with converted pixel data
     renderer.updateTexture(*texture_, rgbaPixels.data(), width_, height_);
     dirty_ = false;
+}
+
+void IndexedPixelBuffer::render(IRenderer& renderer, const Vec2& layerOffset, float opacity) {
+    if (!visible_) {
+        return;
+    }
+    renderer.renderIndexedPixelBuffer(*this, layerOffset, opacity);
 }
 
 } // namespace Engine

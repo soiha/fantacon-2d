@@ -173,4 +173,15 @@ void PixelBuffer::upload(IRenderer& renderer) {
     dirty_ = false;
 }
 
+void PixelBuffer::render(IRenderer& renderer, const Vec2& layerOffset, float opacity) {
+    if (!visible_) {
+        return;
+    }
+
+    // Upload pixels if dirty
+    upload(renderer);
+
+    renderer.renderPixelBuffer(*this, layerOffset, opacity);
+}
+
 } // namespace Engine

@@ -45,6 +45,14 @@ public:
     // Returns empty vector if character doesn't exist
     const std::vector<Color>& getGlyph(char c) const;
 
+    // Get glyph as 1-bit packed bitmask (for monochrome fonts)
+    // Returns empty vector if character doesn't exist or font is not monochrome
+    // Each byte contains 8 pixels (MSB first), padded to byte boundary per row
+    const std::vector<uint8_t>& getGlyphBitmask(char c) const;
+
+    // Check if this font has optimized bitmasks available
+    bool hasBitmasks() const { return !glyphBitmasks_.empty(); }
+
     // Check if character exists in font
     bool hasGlyph(char c) const;
 
@@ -69,6 +77,10 @@ private:
     std::string charMap_;  // Character map for custom encodings
     std::unordered_map<char, std::vector<Color>> glyphs_;
     std::vector<Color> emptyGlyph_;  // Returned when glyph not found
+
+    // Optimized 1-bit bitmask representation (for monochrome fonts)
+    std::unordered_map<char, std::vector<uint8_t>> glyphBitmasks_;
+    std::vector<uint8_t> emptyBitmask_;  // Returned when bitmask not found
 };
 
 using PixelFontPtr = std::shared_ptr<PixelFont>;

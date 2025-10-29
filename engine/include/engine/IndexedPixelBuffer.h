@@ -4,6 +4,7 @@
 #include "Texture.h"
 #include "Palette.h"
 #include "PixelFont.h"
+#include "ILayerAttachable.h"
 #include <vector>
 #include <memory>
 #include <array>
@@ -16,7 +17,7 @@ class IRenderer;
 // A bitmap buffer using indexed color (256-color palette)
 // Perfect for retro graphics, palette effects, and demoscene tricks
 // Each pixel is a single byte indexing into a 256-color palette
-class IndexedPixelBuffer {
+class IndexedPixelBuffer : public ILayerAttachable {
 public:
     IndexedPixelBuffer(int width, int height);
     ~IndexedPixelBuffer() = default;
@@ -27,6 +28,8 @@ public:
 
     // Drawing primitives
     void drawLine(int x0, int y0, int x1, int y1, uint8_t paletteIndex);
+    void fillTriangle(int x0, int y0, int x1, int y1, int x2, int y2, uint8_t paletteIndex);
+    void fillRect(int x, int y, int width, int height, uint8_t paletteIndex);  // Optimized rectangle fill
 
     // Bulk operations
     void clear(uint8_t paletteIndex = 0);
@@ -72,7 +75,10 @@ public:
 
     // Visibility
     void setVisible(bool visible) { visible_ = visible; }
-    bool isVisible() const { return visible_; }
+    bool isVisible() const override { return visible_; }
+
+    // ILayerAttachable interface
+    void render(IRenderer& renderer, const Vec2& layerOffset, float opacity) override;
 
     // Get underlying texture (for rendering)
     TexturePtr getTexture() const { return texture_; }

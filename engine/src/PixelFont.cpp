@@ -175,6 +175,14 @@ const std::vector<Color>& PixelFont::getGlyph(char c) const {
     return emptyGlyph_;
 }
 
+const std::vector<uint8_t>& PixelFont::getGlyphBitmask(char c) const {
+    auto it = glyphBitmasks_.find(c);
+    if (it != glyphBitmasks_.end()) {
+        return it->second;
+    }
+    return emptyBitmask_;
+}
+
 bool PixelFont::hasGlyph(char c) const {
     return glyphs_.find(c) != glyphs_.end();
 }

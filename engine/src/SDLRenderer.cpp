@@ -68,6 +68,10 @@ bool SDLRenderer::init(const std::string& title, int width, int height) {
     // Set blend mode for transparency
     SDL_SetRenderDrawBlendMode(renderer_, SDL_BLENDMODE_BLEND);
 
+    // Store viewport dimensions
+    windowWidth_ = width;
+    windowHeight_ = height;
+
     return true;
 }
 
@@ -94,7 +98,7 @@ void SDLRenderer::present() {
     SDL_RenderPresent(renderer_);
 }
 
-void SDLRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset) {
+void SDLRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset, float opacity) {
     if (!sprite.isVisible() || !sprite.getTexture() || !sprite.getTexture()->isValid()) {
         return;
     }
@@ -142,7 +146,7 @@ void SDLRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset) {
     );
 }
 
-void SDLRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset) {
+void SDLRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset, float opacity) {
     if (!tilemap.isVisible() || !tilemap.getTileset() || !tilemap.getTileset()->isValid()) {
         return;
     }
@@ -178,7 +182,7 @@ void SDLRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset)
     }
 }
 
-void SDLRenderer::renderText(const Text& text, const Vec2& position) {
+void SDLRenderer::renderText(const Text& text, const Vec2& position, float opacity) {
     if (!text.isValid()) {
         return;
     }
@@ -193,7 +197,7 @@ void SDLRenderer::renderText(const Text& text, const Vec2& position) {
     SDL_RenderCopy(renderer_, text.getTexture(), nullptr, &dstRect);
 }
 
-void SDLRenderer::renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset) {
+void SDLRenderer::renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
     if (!buffer.isVisible() || !buffer.getTexture()) {
         return;
     }
@@ -264,7 +268,7 @@ void SDLRenderer::updateTexture(Texture& texture, const Color* pixels, int width
     SDL_UnlockTexture(sdlTexture);
 }
 
-void SDLRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset) {
+void SDLRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
     if (!buffer.isVisible() || !buffer.getTexture()) {
         return;
     }

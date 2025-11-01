@@ -43,6 +43,9 @@ find_package(OpenGL REQUIRED)
 # Find GLEW (for OpenGL extension loading)
 find_package(GLEW REQUIRED)
 
+# Find Vulkan
+find_package(Vulkan REQUIRED)
+
 # Engine library source files
 set(ENGINE_SOURCES
     src/Texture.cpp
@@ -58,6 +61,7 @@ set(ENGINE_SOURCES
     src/Mesh3D.cpp
     src/SDLRenderer.cpp
     src/GLRenderer.cpp
+    src/VulkanRenderer.cpp
     src/Engine.cpp
     src/FPSCounter.cpp
     src/Font.cpp
@@ -91,6 +95,7 @@ target_link_libraries(engine PUBLIC
     nlohmann_json::nlohmann_json
     OpenGL::GL
     GLEW::GLEW
+    Vulkan::Vulkan
 )
 
 # Add library directories only for pkg-config (vcpkg handles it automatically)

@@ -5,11 +5,31 @@ project(Engine2D VERSION 1.0)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-# Use pkg-config to find SDL2 and SDL2_image
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(SDL2 REQUIRED sdl2)
-pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
-pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+# Platform-specific dependency discovery
+# On Windows with vcpkg, use find_package
+# On Mac/Linux, use pkg-config
+if(WIN32 AND DEFINED ENV{VCPKG_ROOT})
+    message(STATUS "Using vcpkg for dependency management")
+
+    # Find SDL2 via vcpkg
+    find_package(SDL2 CONFIG REQUIRED)
+    find_package(SDL2_image CONFIG REQUIRED)
+    find_package(SDL2_ttf CONFIG REQUIRED)
+
+    # Set variables to match pkg-config naming for compatibility
+    set(SDL2_LIBRARIES SDL2::SDL2 SDL2::SDL2main)
+    set(SDL2_IMAGE_LIBRARIES SDL2_image::SDL2_image)
+    set(SDL2_TTF_LIBRARIES SDL2_ttf::SDL2_ttf)
+
+else()
+    message(STATUS "Using pkg-config for dependency management")
+
+    # Use pkg-config to find SDL2 and SDL2_image (Mac/Linux)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED sdl2)
+    pkg_check_modules(SDL2_IMAGE REQUIRED SDL2_image)
+    pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+endif()
 
 # Find GLM
 find_package(glm REQUIRED)
@@ -19,6 +39,9 @@ find_package(nlohmann_json REQUIRED)
 
 # Find OpenGL
 find_package(OpenGL REQUIRED)
+
+# Find GLEW (for OpenGL extension loading)
+find_package(GLEW REQUIRED)
 
 # Engine library source files
 set(ENGINE_SOURCES
@@ -49,10 +72,16 @@ add_library(engine STATIC ${ENGINE_SOURCES})
 
 target_include_directories(engine PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
-    ${SDL2_INCLUDE_DIRS}
-    ${SDL2_IMAGE_INCLUDE_DIRS}
-    ${SDL2_TTF_INCLUDE_DIRS}
 )
+
+# Add SDL2 include directories only for pkg-config (vcpkg handles it automatically)
+if(NOT WIN32 OR NOT DEFINED ENV{VCPKG_ROOT})
+    target_include_directories(engine PUBLIC
+        ${SDL2_INCLUDE_DIRS}
+        ${SDL2_IMAGE_INCLUDE_DIRS}
+        ${SDL2_TTF_INCLUDE_DIRS}
+    )
+endif()
 
 target_link_libraries(engine PUBLIC
     ${SDL2_LIBRARIES}
@@ -61,13 +90,17 @@ target_link_libraries(engine PUBLIC
     glm::glm
     nlohmann_json::nlohmann_json
     OpenGL::GL
+    GLEW::GLEW
 )
 
-target_link_directories(engine PUBLIC
-    ${SDL2_LIBRARY_DIRS}
-    ${SDL2_IMAGE_LIBRARY_DIRS}
-    ${SDL2_TTF_LIBRARY_DIRS}
-)
+# Add library directories only for pkg-config (vcpkg handles it automatically)
+if(NOT WIN32 OR NOT DEFINED ENV{VCPKG_ROOT})
+    target_link_directories(engine PUBLIC
+        ${SDL2_LIBRARY_DIRS}
+        ${SDL2_IMAGE_LIBRARY_DIRS}
+        ${SDL2_TTF_LIBRARY_DIRS}
+    )
+endif()
 
 # Example executables
 add_executable(example examples/main.cpp)
@@ -101,27 +134,35 @@ add_executable(character_layer_demo examples/character_layer_demo.cpp)
 target_link_libraries(character_layer_demo PRIVATE engine)
 
 add_executable(font_converter examples/font_converter.cpp)
-target_include_directories(font_converter PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
-target_link_directories(font_converter PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
 target_link_libraries(font_converter PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
+if(NOT WIN32 OR NOT DEFINED ENV{VCPKG_ROOT})
+    target_include_directories(font_converter PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+    target_link_directories(font_converter PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
+endif()
 
 add_executable(font_viewer examples/font_viewer.cpp)
-target_include_directories(font_viewer PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
-target_link_directories(font_viewer PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
 target_link_libraries(font_viewer PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
+if(NOT WIN32 OR NOT DEFINED ENV{VCPKG_ROOT})
+    target_include_directories(font_viewer PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+    target_link_directories(font_viewer PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
+endif()
 
 add_executable(generate_test_font examples/generate_test_font.cpp)
-target_include_directories(generate_test_font PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
-target_link_directories(generate_test_font PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
 target_link_libraries(generate_test_font PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
+if(NOT WIN32 OR NOT DEFINED ENV{VCPKG_ROOT})
+    target_include_directories(generate_test_font PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+    target_link_directories(generate_test_font PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
+endif()
 
 add_executable(font_debug examples/font_debug.cpp)
 target_link_libraries(font_debug PRIVATE engine)
 
 add_executable(convert_c64_font examples/convert_c64_font.cpp)
-target_include_directories(convert_c64_font PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
-target_link_directories(convert_c64_font PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
 target_link_libraries(convert_c64_font PRIVATE ${SDL2_LIBRARIES} ${SDL2_IMAGE_LIBRARIES})
+if(NOT WIN32 OR NOT DEFINED ENV{VCPKG_ROOT})
+    target_include_directories(convert_c64_font PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_IMAGE_INCLUDE_DIRS})
+    target_link_directories(convert_c64_font PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_IMAGE_LIBRARY_DIRS})
+endif()
 
 add_executable(mesh_demo examples/mesh_demo.cpp)
 target_link_libraries(mesh_demo PRIVATE engine)

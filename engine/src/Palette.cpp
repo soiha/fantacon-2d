@@ -4,6 +4,7 @@
 #include <sstream>
 #include <iostream>
 #include <cmath>
+#include <algorithm>  // For std::clamp (C++17)
 
 namespace Engine {
 

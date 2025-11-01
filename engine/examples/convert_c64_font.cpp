@@ -16,7 +16,7 @@ int main() {
     }
 
     // Load the original 225x225 font
-    SDL_Surface* source = IMG_Load("../examples/resources/c64charset.png");
+    SDL_Surface* source = IMG_Load("examples/resources/c64charset.png");
     if (!source) {
         std::cerr << "Failed to load source font: " << IMG_GetError() << std::endl;
         IMG_Quit();
@@ -74,7 +74,7 @@ int main() {
     SDL_UnlockSurface(sourceRGBA);
 
     // Save
-    const char* outputPath = "../examples/resources/c64font_8x8.png";
+    const char* outputPath = "examples/resources/c64font_8x8.png";
     if (IMG_SavePNG(dest, outputPath) != 0) {
         std::cerr << "Failed to save PNG: " << IMG_GetError() << std::endl;
         SDL_FreeSurface(dest);

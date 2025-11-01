@@ -7,7 +7,7 @@
 #include "engine/Palette.h"
 #include "engine/Mesh3D.h"
 #include "engine/ResourceManager.h"
-#include "engine/GLRenderer.h"
+#include "engine/VulkanRenderer.h"
 #include "engine/FPSCounter.h"
 #include "engine/Logger.h"
 #include <SDL.h>
@@ -98,7 +98,7 @@ public:
         auto& resourceMgr = getEngine()->getResourceManager();
         font_ = resourceMgr.loadPixelFont(
             "atascii",
-            "../examples/resources/atascii.gif",
+            "examples/resources/atascii.gif",
             16, 16, 16, "", 0, 256
         );
 
@@ -169,7 +169,7 @@ public:
 
         // Footer
         textGrid_->fill(0, 36, 60, 1, ' ', 1);
-        textGrid_->print(2, 36, "Hardware-accelerated alpha blending via OpenGL", 1);
+        textGrid_->print(2, 36, "Hardware-accelerated alpha blending via Vulkan", 1);
     }
 
     void update(float deltaTime) override {
@@ -295,16 +295,13 @@ int main(int argc, char* argv[]) {
     config.showFrame = true;
     config.showLogLevel = true;
 
-    // Create engine with GLRenderer
+    // Create engine with VulkanRenderer
     Engine::Engine engine;
 
-    auto glRenderer = std::make_unique<Engine::GLRenderer>();
-    if (!glRenderer->init(config.title, config.width, config.height)) {
-        LOG_ERROR("Failed to initialize GLRenderer!");
-        return 1;
-    }
+    auto vulkanRenderer = std::make_unique<Engine::VulkanRenderer>();
+    // Note: Don't call init() here - engine.init() will do it!
 
-    if (!engine.init(config, std::move(glRenderer))) {
+    if (!engine.init(config, std::move(vulkanRenderer))) {
         LOG_ERROR("Failed to initialize engine!");
         return 1;
     }

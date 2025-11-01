@@ -1,3 +1,4 @@
+#define _USE_MATH_DEFINES  // Must be before <cmath> for M_PI on Windows
 #include "engine/Mesh3D.h"
 #include "engine/IndexedPixelBuffer.h"
 #include "engine/Sprite.h"

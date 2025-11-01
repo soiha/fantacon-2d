@@ -6,44 +6,63 @@
 namespace Engine {
 
 Texture::~Texture() {
-    if (texture_) {
-        SDL_DestroyTexture(texture_);
-        texture_ = nullptr;
+    if (backendHandle_ && deleter_) {
+        deleter_(backendHandle_);
     }
+    backendHandle_ = nullptr;
 }
 
 Texture::Texture(Texture&& other) noexcept
-    : texture_(other.texture_)
+    : backendHandle_(other.backendHandle_)
+    , deleter_(std::move(other.deleter_))
     , width_(other.width_)
     , height_(other.height_) {
-    other.texture_ = nullptr;
+    other.backendHandle_ = nullptr;
+    other.deleter_ = nullptr;
     other.width_ = 0;
     other.height_ = 0;
 }
 
 Texture& Texture::operator=(Texture&& other) noexcept {
     if (this != &other) {
-        if (texture_) {
-            SDL_DestroyTexture(texture_);
+        // Clean up existing resource
+        if (backendHandle_ && deleter_) {
+            deleter_(backendHandle_);
         }
-        texture_ = other.texture_;
+
+        // Move from other
+        backendHandle_ = other.backendHandle_;
+        deleter_ = std::move(other.deleter_);
         width_ = other.width_;
         height_ = other.height_;
-        other.texture_ = nullptr;
+
+        // Reset other
+        other.backendHandle_ = nullptr;
+        other.deleter_ = nullptr;
         other.width_ = 0;
         other.height_ = 0;
     }
     return *this;
 }
 
-bool Texture::loadFromFile(const std::string& path, IRenderer& renderer) {
-    // Clean up existing texture
-    if (texture_) {
-        SDL_DestroyTexture(texture_);
-        texture_ = nullptr;
+void Texture::setHandle(void* handle, DeleterFunc deleter) {
+    // Clean up existing resource if any
+    if (backendHandle_ && deleter_) {
+        deleter_(backendHandle_);
     }
 
-    // Load image
+    backendHandle_ = handle;
+    deleter_ = deleter;
+}
+
+bool Texture::loadFromFile(const std::string& path, IRenderer& renderer) {
+    // Clean up existing texture
+    if (backendHandle_ && deleter_) {
+        deleter_(backendHandle_);
+        backendHandle_ = nullptr;
+    }
+
+    // Load image using SDL_Image (this is backend-agnostic image loading)
     SDL_Surface* surface = IMG_Load(path.c_str());
     if (!surface) {
         std::cerr << "Failed to load image " << path << ": " << IMG_GetError() << std::endl;
@@ -51,9 +70,11 @@ bool Texture::loadFromFile(const std::string& path, IRenderer& renderer) {
     }
 
     // Create texture using backend context (SDL_Renderer* for SDL backend)
+    // NOTE: This assumes SDL backend for now. For true backend independence,
+    // this method should be moved to IRenderer as loadTextureFromFile()
     SDL_Renderer* sdlRenderer = static_cast<SDL_Renderer*>(renderer.getBackendContext());
-    texture_ = SDL_CreateTextureFromSurface(sdlRenderer, surface);
-    if (!texture_) {
+    SDL_Texture* sdlTexture = SDL_CreateTextureFromSurface(sdlRenderer, surface);
+    if (!sdlTexture) {
         std::cerr << "Failed to create texture from " << path << ": " << SDL_GetError() << std::endl;
         SDL_FreeSurface(surface);
         return false;
@@ -61,8 +82,14 @@ bool Texture::loadFromFile(const std::string& path, IRenderer& renderer) {
 
     width_ = surface->w;
     height_ = surface->h;
-
     SDL_FreeSurface(surface);
+
+    // Set the backend handle with SDL-specific deleter
+    backendHandle_ = sdlTexture;
+    deleter_ = [](void* handle) {
+        SDL_DestroyTexture(static_cast<SDL_Texture*>(handle));
+    };
+
     return true;
 }
 

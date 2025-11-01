@@ -343,7 +343,7 @@ int main(int argc, char* argv[]) {
 
     // Load resources via ResourceManager
     auto& rm = engine.getResourceManager();
-    auto hgTexture = rm.loadTexture("hg_sprite", "../examples/resources/hg.png");
+    auto hgTexture = rm.loadTexture("hg_sprite", "examples/resources/hg.png");
     if (!hgTexture) {
         std::cerr << "Warning: Could not load hg.png sprite!" << std::endl;
     }

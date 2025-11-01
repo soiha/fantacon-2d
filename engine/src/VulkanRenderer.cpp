@@ -453,19 +453,178 @@ void VulkanRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset,
 }
 
 void VulkanRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset, float opacity) {
-    // TODO: Implement tilemap rendering
+    if (!tilemap.isVisible() || !tilemap.getTileset() || !tilemap.getTileset()->isValid()) {
+        return;
+    }
+
+    auto tileset = tilemap.getTileset();
+    Vec2 pos = tilemap.getPosition() + layerOffset;
+    int tileWidth = tilemap.getTileWidth();
+    int tileHeight = tilemap.getTileHeight();
+    int tilesPerRow = tilemap.getTilesPerRow();
+
+    if (tilesPerRow <= 0) return;
+
+    // Begin frame if not already started
+    if (!beginFrame()) {
+        return;
+    }
+
+    // Get or create Vulkan texture for tileset
+    VulkanTexture* vkTexture = getOrCreateVulkanTexture(tileset.get());
+    if (!vkTexture) {
+        return;
+    }
+
+    // Bind texture descriptor set once for all tiles
+    vkCmdBindDescriptorSets(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           pipelineLayout_, 1, 1, &vkTexture->descriptorSet,
+                           0, nullptr);
+
+    // Render each tile
+    for (int y = 0; y < tilemap.getHeight(); ++y) {
+        for (int x = 0; x < tilemap.getWidth(); ++x) {
+            int tileId = tilemap.getTile(x, y);
+            if (tileId < 0) continue;  // Skip empty tiles
+
+            // Calculate source rectangle in tileset (texture coordinates)
+            int srcX = (tileId % tilesPerRow) * tileWidth;
+            int srcY = (tileId / tilesPerRow) * tileHeight;
+
+            // For now, we'll use the full quad and adjust UVs via model matrix
+            // TODO: Support source rectangles by modifying vertex data or using different approach
+
+            // Build model matrix for this tile
+            glm::mat4 model = glm::mat4(1.0f);
+            model = glm::translate(model, glm::vec3(pos.x + x * tileWidth, pos.y + y * tileHeight, 0.0f));
+            model = glm::scale(model, glm::vec3(static_cast<float>(tileWidth), static_cast<float>(tileHeight), 1.0f));
+
+            // Set push constants
+            PushConstants pushConstants{};
+            pushConstants.model = model;
+            pushConstants.tintColor = glm::vec4(1.0f, 1.0f, 1.0f, opacity);
+
+            vkCmdPushConstants(currentCommandBuffer_, pipelineLayout_,
+                              VK_SHADER_STAGE_VERTEX_BIT, 0,
+                              sizeof(PushConstants), &pushConstants);
+
+            // Draw the tile
+            vkCmdDrawIndexed(currentCommandBuffer_, 6, 1, 0, 0, 0);
+        }
+    }
 }
 
 void VulkanRenderer::renderText(const Text& text, const Vec2& position, float opacity) {
     // TODO: Implement text rendering
+    // The Text class currently uses SDL_Texture directly, which is not backend-agnostic.
+    // To support text rendering in Vulkan, we need to:
+    // 1. Refactor Text class to use backend-agnostic Texture
+    // 2. Or provide a way to convert SDL_TTF rendered surfaces to Vulkan textures
+    // For now, text rendering is not supported in the Vulkan renderer.
+
+    if (!text.isValid()) {
+        return;
+    }
+
+    LOG_WARNING("Text rendering is not yet supported in Vulkan renderer");
 }
 
 void VulkanRenderer::renderPixelBuffer(const PixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
-    // TODO: Implement pixel buffer rendering
+    if (!buffer.isVisible() || !buffer.getTexture()) {
+        return;
+    }
+
+    // Upload pixels if dirty
+    const_cast<PixelBuffer&>(buffer).upload(*this);
+
+    // Begin frame if not already started
+    if (!beginFrame()) {
+        return;
+    }
+
+    // Get texture
+    auto texture = buffer.getTexture();
+    VulkanTexture* vkTexture = getOrCreateVulkanTexture(texture.get());
+    if (!vkTexture) {
+        return;
+    }
+
+    // Calculate position with layer offset and scale
+    Vec2 pos = buffer.getPosition() + layerOffset;
+    float scale = buffer.getScale();
+    float width = static_cast<float>(buffer.getWidth()) * scale;
+    float height = static_cast<float>(buffer.getHeight()) * scale;
+
+    // Build model matrix
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(pos.x, pos.y, 0.0f));
+    model = glm::scale(model, glm::vec3(width, height, 1.0f));
+
+    // Set push constants
+    PushConstants pushConstants{};
+    pushConstants.model = model;
+    pushConstants.tintColor = glm::vec4(1.0f, 1.0f, 1.0f, opacity);
+
+    vkCmdPushConstants(currentCommandBuffer_, pipelineLayout_,
+                      VK_SHADER_STAGE_VERTEX_BIT, 0,
+                      sizeof(PushConstants), &pushConstants);
+
+    // Bind texture descriptor set
+    vkCmdBindDescriptorSets(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           pipelineLayout_, 1, 1, &vkTexture->descriptorSet,
+                           0, nullptr);
+
+    // Draw the quad
+    vkCmdDrawIndexed(currentCommandBuffer_, 6, 1, 0, 0, 0);
 }
 
 void VulkanRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
-    // TODO: Implement indexed pixel buffer rendering
+    if (!buffer.isVisible() || !buffer.getTexture()) {
+        return;
+    }
+
+    // Upload pixels if dirty (converts indexed colors to RGBA using palette)
+    const_cast<IndexedPixelBuffer&>(buffer).upload(*this);
+
+    // Begin frame if not already started
+    if (!beginFrame()) {
+        return;
+    }
+
+    // Get texture
+    auto texture = buffer.getTexture();
+    VulkanTexture* vkTexture = getOrCreateVulkanTexture(texture.get());
+    if (!vkTexture) {
+        return;
+    }
+
+    // Calculate position with layer offset and scale
+    Vec2 pos = buffer.getPosition() + layerOffset;
+    float scale = buffer.getScale();
+    float width = static_cast<float>(buffer.getWidth()) * scale;
+    float height = static_cast<float>(buffer.getHeight()) * scale;
+
+    // Build model matrix
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(pos.x, pos.y, 0.0f));
+    model = glm::scale(model, glm::vec3(width, height, 1.0f));
+
+    // Set push constants
+    PushConstants pushConstants{};
+    pushConstants.model = model;
+    pushConstants.tintColor = glm::vec4(1.0f, 1.0f, 1.0f, opacity);
+
+    vkCmdPushConstants(currentCommandBuffer_, pipelineLayout_,
+                      VK_SHADER_STAGE_VERTEX_BIT, 0,
+                      sizeof(PushConstants), &pushConstants);
+
+    // Bind texture descriptor set
+    vkCmdBindDescriptorSets(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           pipelineLayout_, 1, 1, &vkTexture->descriptorSet,
+                           0, nullptr);
+
+    // Draw the quad
+    vkCmdDrawIndexed(currentCommandBuffer_, 6, 1, 0, 0, 0);
 }
 
 TexturePtr VulkanRenderer::createStreamingTexture(int width, int height) {

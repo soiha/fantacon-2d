@@ -4,6 +4,7 @@
 #include "engine/Text.h"
 #include "engine/PixelBuffer.h"
 #include "engine/IndexedPixelBuffer.h"
+#include "engine/Logger.h"
 #include <iostream>
 #include <fstream>
 #include <set>
@@ -22,7 +23,7 @@ bool VulkanRenderer::init(const std::string& title, int width, int height) {
 
     // Initialize SDL video subsystem
     if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-        std::cerr << "Failed to initialize SDL: " << SDL_GetError() << std::endl;
+        LOG_ERROR_STREAM("Failed to initialize SDL: " << SDL_GetError());
         return false;
     }
 
@@ -37,96 +38,96 @@ bool VulkanRenderer::init(const std::string& title, int width, int height) {
     );
 
     if (!window_) {
-        std::cerr << "Failed to create window: " << SDL_GetError() << std::endl;
+        LOG_ERROR_STREAM("Failed to create window: " << SDL_GetError());
         return false;
     }
 
     // Create Vulkan instance
     if (!createInstance()) {
-        std::cerr << "Failed to create Vulkan instance" << std::endl;
+        LOG_ERROR("Failed to create Vulkan instance");
         return false;
     }
 
     // Create surface
     if (!createSurface()) {
-        std::cerr << "Failed to create Vulkan surface" << std::endl;
+        LOG_ERROR("Failed to create Vulkan surface");
         return false;
     }
 
     // Pick physical device
     if (!pickPhysicalDevice()) {
-        std::cerr << "Failed to find suitable GPU" << std::endl;
+        LOG_ERROR("Failed to find suitable GPU");
         return false;
     }
 
     // Create logical device and queues
     if (!createLogicalDevice()) {
-        std::cerr << "Failed to create logical device" << std::endl;
+        LOG_ERROR("Failed to create logical device");
         return false;
     }
 
     // Create swapchain
     if (!createSwapchain()) {
-        std::cerr << "Failed to create swapchain" << std::endl;
+        LOG_ERROR("Failed to create swapchain");
         return false;
     }
 
     // Create render pass
     if (!createRenderPass()) {
-        std::cerr << "Failed to create render pass" << std::endl;
+        LOG_ERROR("Failed to create render pass");
         return false;
     }
 
     // Create framebuffers
     if (!createFramebuffers()) {
-        std::cerr << "Failed to create framebuffers" << std::endl;
+        LOG_ERROR("Failed to create framebuffers");
         return false;
     }
 
     // Create command pool and buffers
     if (!createCommandPool()) {
-        std::cerr << "Failed to create command pool" << std::endl;
+        LOG_ERROR("Failed to create command pool");
         return false;
     }
 
     if (!createCommandBuffers()) {
-        std::cerr << "Failed to create command buffers" << std::endl;
+        LOG_ERROR("Failed to create command buffers");
         return false;
     }
 
     // Create synchronization objects
     if (!createSyncObjects()) {
-        std::cerr << "Failed to create sync objects" << std::endl;
+        LOG_ERROR("Failed to create sync objects");
         return false;
     }
 
     // Create 2D rendering pipeline
     if (!createDescriptorSetLayout()) {
-        std::cerr << "Failed to create descriptor set layout" << std::endl;
+        LOG_ERROR("Failed to create descriptor set layout");
         return false;
     }
 
     if (!createGraphicsPipeline()) {
-        std::cerr << "Failed to create graphics pipeline" << std::endl;
+        LOG_ERROR("Failed to create graphics pipeline");
         return false;
     }
 
     if (!createDescriptorPool()) {
-        std::cerr << "Failed to create descriptor pool" << std::endl;
+        LOG_ERROR("Failed to create descriptor pool");
         return false;
     }
 
     if (!createUniformBuffers()) {
-        std::cerr << "Failed to create uniform buffers" << std::endl;
+        LOG_ERROR("Failed to create uniform buffers");
         return false;
     }
 
     if (!createQuadBuffers()) {
-        std::cerr << "Failed to create quad buffers" << std::endl;
+        LOG_ERROR("Failed to create quad buffers");
         return false;
     }
 
-    std::cout << "Vulkan renderer initialized successfully" << std::endl;
+    LOG_INFO("Vulkan renderer initialized successfully");
     return true;
 }
 
@@ -246,7 +247,7 @@ void VulkanRenderer::present() {
         // Swapchain needs recreation (window resized, etc.)
         return;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-        std::cerr << "Failed to acquire swapchain image" << std::endl;
+        LOG_ERROR("Failed to acquire swapchain image");
         return;
     }
 
@@ -261,7 +262,7 @@ void VulkanRenderer::present() {
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
     if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        std::cerr << "Failed to begin recording command buffer" << std::endl;
+        LOG_ERROR("Failed to begin recording command buffer");
         return;
     }
 
@@ -284,7 +285,7 @@ void VulkanRenderer::present() {
     vkCmdEndRenderPass(commandBuffer);
 
     if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        std::cerr << "Failed to record command buffer" << std::endl;
+        LOG_ERROR("Failed to record command buffer");
         return;
     }
 
@@ -305,7 +306,7 @@ void VulkanRenderer::present() {
     submitInfo.pSignalSemaphores = signalSemaphores;
 
     if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS) {
-        std::cerr << "Failed to submit draw command buffer" << std::endl;
+        LOG_ERROR("Failed to submit draw command buffer");
         return;
     }
 
@@ -325,7 +326,7 @@ void VulkanRenderer::present() {
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         // Swapchain needs recreation
     } else if (result != VK_SUCCESS) {
-        std::cerr << "Failed to present swapchain image" << std::endl;
+        LOG_ERROR("Failed to present swapchain image");
     }
 
     currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -813,7 +814,7 @@ bool VulkanRenderer::createDescriptorSetLayout() {
     layoutInfo.pBindings = bindings.data();
 
     if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorSetLayout_) != VK_SUCCESS) {
-        std::cerr << "Failed to create descriptor set layout!" << std::endl;
+        LOG_ERROR("Failed to create descriptor set layout");
         return false;
     }
 
@@ -826,7 +827,7 @@ bool VulkanRenderer::createGraphicsPipeline() {
     auto fragShaderCode = readShaderFile("shaders/sprite_frag.spv");
 
     if (vertShaderCode.empty() || fragShaderCode.empty()) {
-        std::cerr << "Failed to load shader files!" << std::endl;
+        LOG_ERROR("Failed to load shader files");
         return false;
     }
 
@@ -957,7 +958,7 @@ bool VulkanRenderer::createGraphicsPipeline() {
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
     if (vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS) {
-        std::cerr << "Failed to create pipeline layout!" << std::endl;
+        LOG_ERROR("Failed to create pipeline layout");
         return false;
     }
 
@@ -979,7 +980,7 @@ bool VulkanRenderer::createGraphicsPipeline() {
     pipelineInfo.subpass = 0;
 
     if (vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline_) != VK_SUCCESS) {
-        std::cerr << "Failed to create graphics pipeline!" << std::endl;
+        LOG_ERROR("Failed to create graphics pipeline");
         return false;
     }
 
@@ -987,7 +988,7 @@ bool VulkanRenderer::createGraphicsPipeline() {
     vkDestroyShaderModule(device_, fragShaderModule, nullptr);
     vkDestroyShaderModule(device_, vertShaderModule, nullptr);
 
-    std::cout << "Graphics pipeline created successfully" << std::endl;
+    LOG_INFO("Graphics pipeline created successfully");
     return true;
 }
 
@@ -1006,7 +1007,7 @@ bool VulkanRenderer::createDescriptorPool() {
     poolInfo.maxSets = 1000 + MAX_FRAMES_IN_FLIGHT;
 
     if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
-        std::cerr << "Failed to create descriptor pool!" << std::endl;
+        LOG_ERROR("Failed to create descriptor pool");
         return false;
     }
 
@@ -1123,7 +1124,7 @@ std::vector<char> VulkanRenderer::readShaderFile(const std::string& filename) {
     std::ifstream file(filename, std::ios::ate | std::ios::binary);
 
     if (!file.is_open()) {
-        std::cerr << "Failed to open shader file: " << filename << std::endl;
+        LOG_ERROR_STREAM("Failed to open shader file: " << filename);
         return {};
     }
 
@@ -1145,7 +1146,7 @@ VkShaderModule VulkanRenderer::createShaderModule(const std::vector<char>& code)
 
     VkShaderModule shaderModule;
     if (vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
-        std::cerr << "Failed to create shader module!" << std::endl;
+        LOG_ERROR("Failed to create shader module");
         return VK_NULL_HANDLE;
     }
 
@@ -1167,7 +1168,7 @@ uint32_t VulkanRenderer::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFla
         }
     }
 
-    std::cerr << "Failed to find suitable memory type!" << std::endl;
+    LOG_ERROR("Failed to find suitable memory type");
     return 0;
 }
 
@@ -1181,7 +1182,7 @@ bool VulkanRenderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     bufferInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateBuffer(device_, &bufferInfo, nullptr, &buffer) != VK_SUCCESS) {
-        std::cerr << "Failed to create buffer!" << std::endl;
+        LOG_ERROR("Failed to create buffer");
         return false;
     }
 
@@ -1194,7 +1195,7 @@ bool VulkanRenderer::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
     if (vkAllocateMemory(device_, &allocInfo, nullptr, &bufferMemory) != VK_SUCCESS) {
-        std::cerr << "Failed to allocate buffer memory!" << std::endl;
+        LOG_ERROR("Failed to allocate buffer memory");
         return false;
     }
 
@@ -1255,7 +1256,7 @@ bool VulkanRenderer::createImage(uint32_t width, uint32_t height, VkFormat forma
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
     if (vkCreateImage(device_, &imageInfo, nullptr, &image) != VK_SUCCESS) {
-        std::cerr << "Failed to create image!" << std::endl;
+        LOG_ERROR("Failed to create image");
         return false;
     }
 
@@ -1268,7 +1269,7 @@ bool VulkanRenderer::createImage(uint32_t width, uint32_t height, VkFormat forma
     allocInfo.memoryTypeIndex = findMemoryType(memRequirements.memoryTypeBits, properties);
 
     if (vkAllocateMemory(device_, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS) {
-        std::cerr << "Failed to allocate image memory!" << std::endl;
+        LOG_ERROR("Failed to allocate image memory");
         return false;
     }
 
@@ -1290,7 +1291,7 @@ VkImageView VulkanRenderer::createImageView(VkImage image, VkFormat format) {
 
     VkImageView imageView;
     if (vkCreateImageView(device_, &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
-        std::cerr << "Failed to create image view!" << std::endl;
+        LOG_ERROR("Failed to create image view");
         return VK_NULL_HANDLE;
     }
 
@@ -1341,7 +1342,7 @@ void VulkanRenderer::transitionImageLayout(VkImage image, VkFormat format,
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
     } else {
-        std::cerr << "Unsupported layout transition!" << std::endl;
+        LOG_ERROR("Unsupported layout transition");
         return;
     }
 
@@ -1464,7 +1465,7 @@ bool VulkanRenderer::createTextureFromPixels(const Color* pixels, int width, int
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
 
     if (vkCreateSampler(device_, &samplerInfo, nullptr, &vkTexture.sampler) != VK_SUCCESS) {
-        std::cerr << "Failed to create texture sampler!" << std::endl;
+        LOG_ERROR("Failed to create texture sampler");
         return false;
     }
 
@@ -1476,7 +1477,7 @@ bool VulkanRenderer::createTextureFromPixels(const Color* pixels, int width, int
     allocInfo.pSetLayouts = &descriptorSetLayout_;
 
     if (vkAllocateDescriptorSets(device_, &allocInfo, &vkTexture.descriptorSet) != VK_SUCCESS) {
-        std::cerr << "Failed to allocate descriptor set for texture!" << std::endl;
+        LOG_ERROR("Failed to allocate descriptor set for texture");
         return false;
     }
 
@@ -1519,7 +1520,7 @@ VulkanRenderer::VulkanTexture* VulkanRenderer::getOrCreateVulkanTexture(Texture*
     // Create new Vulkan texture
     // For now, we'll need to load the texture data from the SDL texture
     // This is a simplified version - in production you'd want to handle this better
-    std::cerr << "Warning: Texture not in Vulkan cache, creating on-demand (not yet implemented)" << std::endl;
+    LOG_WARNING("Texture not in Vulkan cache, creating on-demand (not yet implemented)");
     return nullptr;
 }
 

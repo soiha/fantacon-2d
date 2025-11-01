@@ -234,43 +234,51 @@ void VulkanRenderer::clear() {
     // Clear will be handled in the render pass
 }
 
-void VulkanRenderer::present() {
+bool VulkanRenderer::beginFrame() {
+    // Already in a frame, don't begin again
+    if (frameInProgress_) {
+        return true;
+    }
+
     // Wait for previous frame
     vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
 
     // Acquire next image
-    uint32_t imageIndex;
     VkResult result = vkAcquireNextImageKHR(device_, swapchain_, UINT64_MAX,
-        imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
+        imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &currentImageIndex_);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         // Swapchain needs recreation (window resized, etc.)
-        return;
+        return false;
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         LOG_ERROR("Failed to acquire swapchain image");
-        return;
+        return false;
     }
 
     // Reset fence
     vkResetFences(device_, 1, &inFlightFences_[currentFrame_]);
 
-    // Record command buffer
-    VkCommandBuffer commandBuffer = commandBuffers_[currentFrame_];
-    vkResetCommandBuffer(commandBuffer, 0);
+    // Get command buffer for this frame
+    currentCommandBuffer_ = commandBuffers_[currentFrame_];
+    vkResetCommandBuffer(currentCommandBuffer_, 0);
 
+    // Begin command buffer
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
+    if (vkBeginCommandBuffer(currentCommandBuffer_, &beginInfo) != VK_SUCCESS) {
         LOG_ERROR("Failed to begin recording command buffer");
-        return;
+        return false;
     }
+
+    // Update uniform buffer with projection matrix
+    updateUniformBuffer(currentFrame_);
 
     // Begin render pass
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = renderPass_;
-    renderPassInfo.framebuffer = swapchainFramebuffers_[imageIndex];
+    renderPassInfo.framebuffer = swapchainFramebuffers_[currentImageIndex_];
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = swapchainExtent_;
 
@@ -278,14 +286,33 @@ void VulkanRenderer::present() {
     renderPassInfo.clearValueCount = 1;
     renderPassInfo.pClearValues = &clearColor;
 
-    vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(currentCommandBuffer_, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
-    // TODO: Record rendering commands here
+    // Bind graphics pipeline
+    vkCmdBindPipeline(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS, graphicsPipeline_);
 
-    vkCmdEndRenderPass(commandBuffer);
+    // Bind vertex and index buffers
+    VkBuffer vertexBuffers[] = {quadVertexBuffer_};
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(currentCommandBuffer_, 0, 1, vertexBuffers, offsets);
+    vkCmdBindIndexBuffer(currentCommandBuffer_, quadIndexBuffer_, 0, VK_INDEX_TYPE_UINT16);
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
+    frameInProgress_ = true;
+    return true;
+}
+
+void VulkanRenderer::endFrame() {
+    if (!frameInProgress_) {
+        return;
+    }
+
+    // End render pass
+    vkCmdEndRenderPass(currentCommandBuffer_);
+
+    // End command buffer
+    if (vkEndCommandBuffer(currentCommandBuffer_) != VK_SUCCESS) {
         LOG_ERROR("Failed to record command buffer");
+        frameInProgress_ = false;
         return;
     }
 
@@ -299,7 +326,7 @@ void VulkanRenderer::present() {
     submitInfo.pWaitSemaphores = waitSemaphores;
     submitInfo.pWaitDstStageMask = waitStages;
     submitInfo.commandBufferCount = 1;
-    submitInfo.pCommandBuffers = &commandBuffer;
+    submitInfo.pCommandBuffers = &currentCommandBuffer_;
 
     VkSemaphore signalSemaphores[] = {renderFinishedSemaphores_[currentFrame_]};
     submitInfo.signalSemaphoreCount = 1;
@@ -307,10 +334,21 @@ void VulkanRenderer::present() {
 
     if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS) {
         LOG_ERROR("Failed to submit draw command buffer");
+        frameInProgress_ = false;
         return;
     }
 
-    // Present
+    frameInProgress_ = false;
+    currentCommandBuffer_ = VK_NULL_HANDLE;
+}
+
+void VulkanRenderer::present() {
+    // End the frame (submit command buffer)
+    endFrame();
+
+    // Present the image
+    VkSemaphore signalSemaphores[] = {renderFinishedSemaphores_[currentFrame_]};
+
     VkPresentInfoKHR presentInfo{};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
     presentInfo.waitSemaphoreCount = 1;
@@ -319,9 +357,9 @@ void VulkanRenderer::present() {
     VkSwapchainKHR swapchains[] = {swapchain_};
     presentInfo.swapchainCount = 1;
     presentInfo.pSwapchains = swapchains;
-    presentInfo.pImageIndices = &imageIndex;
+    presentInfo.pImageIndices = &currentImageIndex_;
 
-    result = vkQueuePresentKHR(presentQueue_, &presentInfo);
+    VkResult result = vkQueuePresentKHR(presentQueue_, &presentInfo);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         // Swapchain needs recreation
@@ -329,12 +367,82 @@ void VulkanRenderer::present() {
         LOG_ERROR("Failed to present swapchain image");
     }
 
+    // Move to next frame
     currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-// Stub implementations for rendering methods (to be implemented)
+// Rendering implementations
 void VulkanRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset, float opacity) {
-    // TODO: Implement sprite rendering
+    // Skip invisible sprites
+    if (!sprite.isVisible()) {
+        return;
+    }
+
+    // Get texture
+    auto texture = sprite.getTexture();
+    if (!texture || !texture->isValid()) {
+        // TODO: Create and use a default white 1x1 texture for textureless sprites
+        return;
+    }
+
+    // Begin frame if not already started
+    if (!beginFrame()) {
+        return;
+    }
+
+    // Get or create Vulkan texture
+    VulkanTexture* vkTexture = getOrCreateVulkanTexture(texture.get());
+    if (!vkTexture) {
+        return;  // Texture not available yet
+    }
+
+    // Calculate sprite dimensions
+    float width = static_cast<float>(vkTexture->width);
+    float height = static_cast<float>(vkTexture->height);
+
+    // Handle source rectangle (sprite sheets)
+    if (sprite.hasSourceRect()) {
+        const auto& srcRect = sprite.getSourceRect();
+        width = srcRect.w;
+        height = srcRect.h;
+        // TODO: Adjust texture coordinates for source rectangle
+    }
+
+    // Build model matrix: translate -> rotate -> scale
+    // Note: We scale by texture dimensions to convert unit quad to actual size
+    glm::mat4 model = glm::mat4(1.0f);
+
+    // Translate to position (including layer offset)
+    Vec2 finalPos = sprite.getPosition() + layerOffset;
+    model = glm::translate(model, glm::vec3(finalPos.x, finalPos.y, 0.0f));
+
+    // Rotate around center
+    if (sprite.getRotation() != 0.0f) {
+        model = glm::translate(model, glm::vec3(width * 0.5f, height * 0.5f, 0.0f));
+        model = glm::rotate(model, glm::radians(sprite.getRotation()), glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::translate(model, glm::vec3(-width * 0.5f, -height * 0.5f, 0.0f));
+    }
+
+    // Scale by sprite scale and texture dimensions
+    Vec2 scale = sprite.getScale();
+    model = glm::scale(model, glm::vec3(width * scale.x, height * scale.y, 1.0f));
+
+    // Set push constants
+    PushConstants pushConstants{};
+    pushConstants.model = model;
+    pushConstants.tintColor = glm::vec4(1.0f, 1.0f, 1.0f, opacity);  // White tint with opacity
+
+    vkCmdPushConstants(currentCommandBuffer_, pipelineLayout_,
+                      VK_SHADER_STAGE_VERTEX_BIT, 0,
+                      sizeof(PushConstants), &pushConstants);
+
+    // Bind texture descriptor set
+    vkCmdBindDescriptorSets(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           pipelineLayout_, 0, 1, &vkTexture->descriptorSet,
+                           0, nullptr);
+
+    // Draw the quad (6 indices = 2 triangles)
+    vkCmdDrawIndexed(currentCommandBuffer_, 6, 1, 0, 0, 0);
 }
 
 void VulkanRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset, float opacity) {

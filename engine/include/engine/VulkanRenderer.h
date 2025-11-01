@@ -128,6 +128,11 @@ private:
     uint32_t currentFrame_ = 0;
     static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
 
+    // Frame state tracking
+    bool frameInProgress_ = false;
+    uint32_t currentImageIndex_ = 0;
+    VkCommandBuffer currentCommandBuffer_ = VK_NULL_HANDLE;
+
     // Validation layers (debug mode)
 #ifdef _DEBUG
     bool enableValidationLayers_ = true;
@@ -176,6 +181,10 @@ private:
     bool createQuadBuffers();
 
     void updateUniformBuffer(uint32_t currentImage);
+
+    // Frame management
+    bool beginFrame();
+    void endFrame();
 
     // Shader loading
     VkShaderModule createShaderModule(const std::vector<char>& code);

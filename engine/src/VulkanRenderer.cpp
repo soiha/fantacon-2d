@@ -350,8 +350,17 @@ void VulkanRenderer::endFrame() {
 }
 
 void VulkanRenderer::present() {
-    // End the frame (submit command buffer)
+    // If no frame was started, there's nothing to present
+    // This can happen when clear() is called but no renderables draw anything
+    bool hadFrame = frameInProgress_;
+
+    // End the frame (submit command buffer) if one is in progress
     endFrame();
+
+    // Only present if we actually had a frame to render
+    if (!hadFrame) {
+        return;
+    }
 
     // Present the image
     VkSemaphore signalSemaphores[] = {renderFinishedSemaphores_[currentFrame_]};

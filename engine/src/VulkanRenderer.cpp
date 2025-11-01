@@ -1492,6 +1492,10 @@ void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
                                static_cast<float>(windowHeight_), 0.0f,
                                -1.0f, 1.0f);
 
+    // Vulkan's clip space Y axis is inverted compared to OpenGL
+    // Flip the Y component to match SDL/OpenGL coordinate system
+    ubo.projection[1][1] *= -1.0f;
+
     memcpy(uniformBuffersMapped_[currentImage], &ubo, sizeof(ubo));
 }
 

@@ -462,12 +462,63 @@ void VulkanRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, 
 }
 
 TexturePtr VulkanRenderer::createStreamingTexture(int width, int height) {
-    // TODO: Implement streaming texture creation
-    return nullptr;
+    // Create a new VulkanTexture entry in our cache
+    VulkanTexture vkTexture{};
+    vkTexture.width = width;
+    vkTexture.height = height;
+
+    // Allocate a unique handle for this texture (use address of VulkanTexture)
+    // We'll store it in cache first, then use the cache entry's address as the handle
+    void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(textureCache_.size() + 1));
+
+    // Store in cache
+    textureCache_[handle] = vkTexture;
+
+    // Create Texture object with custom deleter for Vulkan
+    auto deleter = [this, handle](void* /*backendHandle*/) {
+        // Clean up VulkanTexture when Texture is destroyed
+        auto it = textureCache_.find(handle);
+        if (it != textureCache_.end()) {
+            destroyVulkanTexture(it->second);
+            textureCache_.erase(it);
+        }
+    };
+
+    auto texture = std::make_shared<Texture>();
+    texture->setHandle(handle, deleter);
+    texture->setDimensions(width, height);
+    return texture;
 }
 
 void VulkanRenderer::updateTexture(Texture& texture, const Color* pixels, int width, int height) {
-    // TODO: Implement texture update
+    if (!texture.isValid() || !pixels) {
+        return;
+    }
+
+    void* handle = texture.getHandle();
+    auto it = textureCache_.find(handle);
+
+    if (it == textureCache_.end()) {
+        LOG_ERROR("Texture not found in Vulkan cache");
+        return;
+    }
+
+    VulkanTexture& vkTexture = it->second;
+
+    // If texture already exists and dimensions match, we can update it
+    // Otherwise, destroy and recreate
+    if (vkTexture.image != VK_NULL_HANDLE) {
+        if (vkTexture.width != width || vkTexture.height != height) {
+            // Dimensions changed, need to recreate
+            destroyVulkanTexture(vkTexture);
+            vkTexture = VulkanTexture{};  // Reset
+        }
+    }
+
+    // Create or update the texture from pixels
+    if (!createTextureFromPixels(pixels, width, height, vkTexture)) {
+        LOG_ERROR("Failed to create/update Vulkan texture from pixels");
+    }
 }
 
 // Implementation of initialization helpers

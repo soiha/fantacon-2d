@@ -192,7 +192,7 @@ int main(int argc, char* argv[]) {
     SDL_UnlockSurface(surface);
 
     // Save the image
-    const char* outputPath = "../examples/resources/test_font_8x8.png";
+    const char* outputPath = "examples/resources/test_font_8x8.png";
     if (IMG_SavePNG(surface, outputPath) != 0) {
         std::cerr << "Failed to save PNG: " << IMG_GetError() << std::endl;
         SDL_FreeSurface(surface);

@@ -153,7 +153,7 @@ public:
 
         font_ = resourceManager.loadPixelFont(
             "atascii",
-            "../examples/resources/atascii.gif",
+            "examples/resources/atascii.gif",
             16, 16, 16, "", 0
         );
 

@@ -42,7 +42,7 @@ public:
 
         // Load mesh with normals from OBJ file
         auto& resourceMgr = getEngine()->getResourceManager();
-        loadedCube_ = resourceMgr.loadMesh3D("cube_normals", "../examples/resources/cube_with_normals.obj");
+        loadedCube_ = resourceMgr.loadMesh3D("cube_normals", "examples/resources/cube_with_normals.obj");
 
         if (loadedCube_) {
             loadedCube_->setPosition(Engine::Vec2{240, 300});

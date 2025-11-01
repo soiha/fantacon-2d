@@ -7,7 +7,7 @@ int main() {
 
     auto font = rm.loadPixelFont(
         "atascii",
-        "../examples/resources/atascii.gif",
+        "examples/resources/atascii.gif",
         8, 8, 16, "", 0
     );
 

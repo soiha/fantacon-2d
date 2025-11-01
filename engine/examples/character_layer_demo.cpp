@@ -28,7 +28,7 @@ public:
         // Load ATASCII font (16x16 characters)
         font_ = resourceManager.loadPixelFont(
             "atascii",
-            "../examples/resources/atascii.gif",
+            "examples/resources/atascii.gif",
             16,  // char width
             16,  // char height
             16,  // chars per row

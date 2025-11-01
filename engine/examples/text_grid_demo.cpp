@@ -53,7 +53,7 @@ public:
         auto& resourceMgr = getEngine()->getResourceManager();
         font_ = resourceMgr.loadPixelFont(
             "atascii",
-            "../examples/resources/atascii.gif",
+            "examples/resources/atascii.gif",
             16,  // char width
             16,  // char height
             16,  // chars per row

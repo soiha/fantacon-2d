@@ -29,7 +29,7 @@ public:
         // Extract full 16x16 to see the actual layout
         c64Font_ = resourceManager.loadPixelFont(
             "atascii",
-            "../examples/resources/atascii.gif",
+            "examples/resources/atascii.gif",
             16,  // char width (use full 16x16 cell)
             16,  // char height
             16,  // chars per row

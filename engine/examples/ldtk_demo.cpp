@@ -194,7 +194,7 @@ int main(int argc, char* argv[]) {
 
     auto tilemap = rm.loadLDtkTilemap(
         "level_ground",                    // Cache name
-        "../examples/resources/world.ldtk", // Path to LDtk file (relative to build dir)
+        "examples/resources/world.ldtk", // Path to LDtk file (relative to build dir)
         "Level_0",                         // Level identifier in LDtk
         "Ground"                           // Layer identifier in LDtk
     );

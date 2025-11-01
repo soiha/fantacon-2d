@@ -183,3 +183,6 @@ target_link_libraries(text_grid_demo PRIVATE engine)
 
 add_executable(layer_transparency_demo examples/layer_transparency_demo.cpp)
 target_link_libraries(layer_transparency_demo PRIVATE engine)
+
+add_executable(vulkan_test examples/vulkan_test.cpp)
+target_link_libraries(vulkan_test PRIVATE engine)

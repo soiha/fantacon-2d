@@ -4,9 +4,29 @@
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
 #include <vector>
+#include <unordered_map>
 
 namespace Engine {
+
+// Vertex structure for 2D rendering
+struct Vertex2D {
+    glm::vec2 position;
+    glm::vec2 texCoord;
+    glm::vec4 color;
+};
+
+// Uniform buffer object for projection matrix
+struct UniformBufferObject {
+    glm::mat4 projection;
+};
+
+// Push constants for per-draw data
+struct PushConstants {
+    glm::mat4 model;
+    glm::vec4 tintColor;
+};
 
 // Vulkan-based renderer implementation using SDL for window management
 class VulkanRenderer : public IRenderer {
@@ -118,6 +138,69 @@ private:
     const std::vector<const char*> validationLayers_ = {
         "VK_LAYER_KHRONOS_validation"
     };
+
+    // 2D Rendering Pipeline
+    VkPipeline graphicsPipeline_ = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
+    VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
+
+    // Uniform buffers (one per frame in flight)
+    std::vector<VkBuffer> uniformBuffers_;
+    std::vector<VkDeviceMemory> uniformBuffersMemory_;
+    std::vector<void*> uniformBuffersMapped_;
+
+    // Vertex and index buffers for quad rendering
+    VkBuffer quadVertexBuffer_ = VK_NULL_HANDLE;
+    VkDeviceMemory quadVertexBufferMemory_ = VK_NULL_HANDLE;
+    VkBuffer quadIndexBuffer_ = VK_NULL_HANDLE;
+    VkDeviceMemory quadIndexBufferMemory_ = VK_NULL_HANDLE;
+
+    // Texture cache (maps Texture* to VkImage/VkImageView/VkDescriptorSet)
+    struct VulkanTexture {
+        VkImage image = VK_NULL_HANDLE;
+        VkDeviceMemory memory = VK_NULL_HANDLE;
+        VkImageView imageView = VK_NULL_HANDLE;
+        VkSampler sampler = VK_NULL_HANDLE;
+        VkDescriptorSet descriptorSet = VK_NULL_HANDLE;
+        int width = 0;
+        int height = 0;
+    };
+    std::unordered_map<void*, VulkanTexture> textureCache_;
+
+    // Helper methods for 2D rendering
+    bool createGraphicsPipeline();
+    bool createDescriptorSetLayout();
+    bool createDescriptorPool();
+    bool createUniformBuffers();
+    bool createQuadBuffers();
+
+    void updateUniformBuffer(uint32_t currentImage);
+
+    // Shader loading
+    VkShaderModule createShaderModule(const std::vector<char>& code);
+    std::vector<char> readShaderFile(const std::string& filename);
+
+    // Buffer and image helpers
+    bool createBuffer(VkDeviceSize size, VkBufferUsageFlags usage,
+                     VkMemoryPropertyFlags properties, VkBuffer& buffer,
+                     VkDeviceMemory& bufferMemory);
+    void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
+    uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
+    bool createImage(uint32_t width, uint32_t height, VkFormat format,
+                    VkImageTiling tiling, VkImageUsageFlags usage,
+                    VkMemoryPropertyFlags properties, VkImage& image,
+                    VkDeviceMemory& imageMemory);
+    VkImageView createImageView(VkImage image, VkFormat format);
+    void transitionImageLayout(VkImage image, VkFormat format,
+                              VkImageLayout oldLayout, VkImageLayout newLayout);
+    void copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height);
+
+    // Texture management
+    VulkanTexture* getOrCreateVulkanTexture(Texture* texture);
+    bool createTextureFromPixels(const Color* pixels, int width, int height, VulkanTexture& vkTexture);
+    void destroyVulkanTexture(VulkanTexture& vkTexture);
 };
 
 } // namespace Engine

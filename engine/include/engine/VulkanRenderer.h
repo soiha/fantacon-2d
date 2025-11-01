@@ -147,13 +147,15 @@ private:
     // 2D Rendering Pipeline
     VkPipeline graphicsPipeline_ = VK_NULL_HANDLE;
     VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
-    VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
+    VkDescriptorSetLayout uniformDescriptorSetLayout_ = VK_NULL_HANDLE;  // Set 0: Uniform buffer
+    VkDescriptorSetLayout textureDescriptorSetLayout_ = VK_NULL_HANDLE;  // Set 1: Texture sampler
     VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
 
     // Uniform buffers (one per frame in flight)
     std::vector<VkBuffer> uniformBuffers_;
     std::vector<VkDeviceMemory> uniformBuffersMemory_;
     std::vector<void*> uniformBuffersMapped_;
+    std::vector<VkDescriptorSet> uniformDescriptorSets_;  // One per frame
 
     // Vertex and index buffers for quad rendering
     VkBuffer quadVertexBuffer_ = VK_NULL_HANDLE;

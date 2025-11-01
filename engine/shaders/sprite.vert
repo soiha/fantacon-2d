@@ -9,8 +9,8 @@ layout(location = 2) in vec4 inColor;
 layout(location = 0) out vec2 fragTexCoord;
 layout(location = 1) out vec4 fragColor;
 
-// Uniform buffer for projection matrix
-layout(binding = 0) uniform UniformBufferObject {
+// Uniform buffer for projection matrix (set 0)
+layout(set = 0, binding = 0) uniform UniformBufferObject {
     mat4 projection;
 } ubo;
 

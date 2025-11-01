@@ -171,9 +171,11 @@ void VulkanRenderer::shutdown() {
         if (pipelineLayout_ != VK_NULL_HANDLE)
             vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
 
-        // Destroy descriptor set layout
-        if (descriptorSetLayout_ != VK_NULL_HANDLE)
-            vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
+        // Destroy descriptor set layouts
+        if (textureDescriptorSetLayout_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(device_, textureDescriptorSetLayout_, nullptr);
+        if (uniformDescriptorSetLayout_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(device_, uniformDescriptorSetLayout_, nullptr);
 
         // Destroy sync objects
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -296,6 +298,11 @@ bool VulkanRenderer::beginFrame() {
     VkDeviceSize offsets[] = {0};
     vkCmdBindVertexBuffers(currentCommandBuffer_, 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(currentCommandBuffer_, quadIndexBuffer_, 0, VK_INDEX_TYPE_UINT16);
+
+    // Bind uniform descriptor set (set 0) for this frame
+    vkCmdBindDescriptorSets(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                           pipelineLayout_, 0, 1, &uniformDescriptorSets_[currentFrame_],
+                           0, nullptr);
 
     frameInProgress_ = true;
     return true;
@@ -436,9 +443,9 @@ void VulkanRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset,
                       VK_SHADER_STAGE_VERTEX_BIT, 0,
                       sizeof(PushConstants), &pushConstants);
 
-    // Bind texture descriptor set
+    // Bind texture descriptor set (set 1)
     vkCmdBindDescriptorSets(currentCommandBuffer_, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                           pipelineLayout_, 0, 1, &vkTexture->descriptorSet,
+                           pipelineLayout_, 1, 1, &vkTexture->descriptorSet,
                            0, nullptr);
 
     // Draw the quad (6 indices = 2 triangles)
@@ -949,7 +956,7 @@ VulkanRenderer::QueueFamilyIndices VulkanRenderer::findQueueFamilies(VkPhysicalD
 // ============================================================================
 
 bool VulkanRenderer::createDescriptorSetLayout() {
-    // Uniform buffer binding (projection matrix)
+    // Create Set 0: Uniform buffer binding (projection matrix)
     VkDescriptorSetLayoutBinding uboLayoutBinding{};
     uboLayoutBinding.binding = 0;
     uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -957,23 +964,31 @@ bool VulkanRenderer::createDescriptorSetLayout() {
     uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
     uboLayoutBinding.pImmutableSamplers = nullptr;
 
-    // Texture sampler binding
+    VkDescriptorSetLayoutCreateInfo uniformLayoutInfo{};
+    uniformLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    uniformLayoutInfo.bindingCount = 1;
+    uniformLayoutInfo.pBindings = &uboLayoutBinding;
+
+    if (vkCreateDescriptorSetLayout(device_, &uniformLayoutInfo, nullptr, &uniformDescriptorSetLayout_) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create uniform descriptor set layout");
+        return false;
+    }
+
+    // Create Set 1: Texture sampler binding
     VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-    samplerLayoutBinding.binding = 1;
+    samplerLayoutBinding.binding = 0;  // Binding 0 within set 1
     samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     samplerLayoutBinding.descriptorCount = 1;
     samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     samplerLayoutBinding.pImmutableSamplers = nullptr;
 
-    std::array<VkDescriptorSetLayoutBinding, 2> bindings = {uboLayoutBinding, samplerLayoutBinding};
+    VkDescriptorSetLayoutCreateInfo textureLayoutInfo{};
+    textureLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    textureLayoutInfo.bindingCount = 1;
+    textureLayoutInfo.pBindings = &samplerLayoutBinding;
 
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    layoutInfo.pBindings = bindings.data();
-
-    if (vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorSetLayout_) != VK_SUCCESS) {
-        LOG_ERROR("Failed to create descriptor set layout");
+    if (vkCreateDescriptorSetLayout(device_, &textureLayoutInfo, nullptr, &textureDescriptorSetLayout_) != VK_SUCCESS) {
+        LOG_ERROR("Failed to create texture descriptor set layout");
         return false;
     }
 
@@ -1108,11 +1123,16 @@ bool VulkanRenderer::createGraphicsPipeline() {
     pushConstantRange.offset = 0;
     pushConstantRange.size = sizeof(PushConstants);
 
-    // Pipeline layout
+    // Pipeline layout - use both descriptor set layouts
+    std::array<VkDescriptorSetLayout, 2> descriptorSetLayouts = {
+        uniformDescriptorSetLayout_,   // Set 0: Uniform buffer
+        textureDescriptorSetLayout_    // Set 1: Texture sampler
+    };
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &descriptorSetLayout_;
+    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
+    pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
     pipelineLayoutInfo.pushConstantRangeCount = 1;
     pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
@@ -1179,6 +1199,7 @@ bool VulkanRenderer::createUniformBuffers() {
     uniformBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
     uniformBuffersMemory_.resize(MAX_FRAMES_IN_FLIGHT);
     uniformBuffersMapped_.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformDescriptorSets_.resize(MAX_FRAMES_IN_FLIGHT);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         if (!createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -1189,6 +1210,37 @@ bool VulkanRenderer::createUniformBuffers() {
 
         // Map the buffer memory so we can update it later
         vkMapMemory(device_, uniformBuffersMemory_[i], 0, bufferSize, 0, &uniformBuffersMapped_[i]);
+    }
+
+    // Create descriptor sets for uniform buffers (one per frame)
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = descriptorPool_;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &uniformDescriptorSetLayout_;
+
+        if (vkAllocateDescriptorSets(device_, &allocInfo, &uniformDescriptorSets_[i]) != VK_SUCCESS) {
+            LOG_ERROR("Failed to allocate uniform descriptor set");
+            return false;
+        }
+
+        // Update descriptor set with buffer info
+        VkDescriptorBufferInfo bufferInfo{};
+        bufferInfo.buffer = uniformBuffers_[i];
+        bufferInfo.offset = 0;
+        bufferInfo.range = sizeof(UniformBufferObject);
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = uniformDescriptorSets_[i];
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pBufferInfo = &bufferInfo;
+
+        vkUpdateDescriptorSets(device_, 1, &descriptorWrite, 0, nullptr);
     }
 
     return true;
@@ -1628,12 +1680,12 @@ bool VulkanRenderer::createTextureFromPixels(const Color* pixels, int width, int
         return false;
     }
 
-    // Create descriptor set for this texture
+    // Create descriptor set for this texture (using texture descriptor set layout)
     VkDescriptorSetAllocateInfo allocInfo{};
     allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
     allocInfo.descriptorPool = descriptorPool_;
     allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &descriptorSetLayout_;
+    allocInfo.pSetLayouts = &textureDescriptorSetLayout_;
 
     if (vkAllocateDescriptorSets(device_, &allocInfo, &vkTexture.descriptorSet) != VK_SUCCESS) {
         LOG_ERROR("Failed to allocate descriptor set for texture");
@@ -1649,7 +1701,7 @@ bool VulkanRenderer::createTextureFromPixels(const Color* pixels, int width, int
     VkWriteDescriptorSet descriptorWrite{};
     descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     descriptorWrite.dstSet = vkTexture.descriptorSet;
-    descriptorWrite.dstBinding = 1;  // Texture binding
+    descriptorWrite.dstBinding = 0;  // Binding 0 within set 1
     descriptorWrite.dstArrayElement = 0;
     descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     descriptorWrite.descriptorCount = 1;

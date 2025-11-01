@@ -137,7 +137,7 @@ void SDLRenderer::renderSprite(const Sprite& sprite, const Vec2& layerOffset, fl
     SDL_Point center = {dstWidth / 2, dstHeight / 2};
     SDL_RenderCopyEx(
         renderer_,
-        texture->getSDLTexture(),
+        static_cast<SDL_Texture*>(texture->getHandle()),
         &srcRect,
         &dstRect,
         rotation,
@@ -177,7 +177,7 @@ void SDLRenderer::renderTilemap(const Tilemap& tilemap, const Vec2& layerOffset,
                 tileHeight
             };
 
-            SDL_RenderCopy(renderer_, tileset->getSDLTexture(), &srcRect, &dstRect);
+            SDL_RenderCopy(renderer_, static_cast<SDL_Texture*>(tileset->getHandle()), &srcRect, &dstRect);
         }
     }
 }
@@ -235,9 +235,11 @@ TexturePtr SDLRenderer::createStreamingTexture(int width, int height) {
         return nullptr;
     }
 
-    // Wrap in our Texture class
+    // Wrap in our Texture class with SDL-specific deleter
     auto texture = std::make_shared<Texture>();
-    texture->setHandle(sdlTexture);
+    texture->setHandle(sdlTexture, [](void* handle) {
+        SDL_DestroyTexture(static_cast<SDL_Texture*>(handle));
+    });
     texture->setDimensions(width, height);
 
     return texture;

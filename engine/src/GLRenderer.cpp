@@ -373,6 +373,11 @@ void GLRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, cons
 
 TexturePtr GLRenderer::createStreamingTexture(int width, int height) {
     // TODO: Implement OpenGL streaming texture creation
+    // When implementing, use setHandle with a deleter like:
+    // texture->setHandle(reinterpret_cast<void*>(glTexId), [](void* handle) {
+    //     GLuint id = reinterpret_cast<GLuint>(handle);
+    //     glDeleteTextures(1, &id);
+    // });
     return nullptr;
 }
 

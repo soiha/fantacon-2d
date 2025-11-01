@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gcc:*)",
+      "Bash(g++:*)",
+      "Bash(where:*)",
+      "Read(//c/Users/Soiha/AppData/Local/Programs/CLion/bin/mingw/bin/**)",
+      "Bash(test:*)",
+      "Bash(PATH=\"C:/Users/Soiha/AppData/Local/Programs/CLion/bin/mingw/bin:$PATH\" cmake:*)",
+      "Bash(\"C:/Users/Soiha/AppData/Local/Programs/CLion/bin/mingw/bin/gcc.exe\" --version)",
+      "Bash(\"C:/Users/Soiha/AppData/Local/Programs/CLion/bin/mingw/bin/gcc.exe\":*)",
+      "Bash(clang++:*)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Program Files (x86)/Microsoft Visual Studio/**)",
+      "Bash(echo:*)",
+      "Bash(vswhere:*)",
+      "Bash(vcpkg:*)",
+      "Read(//c/Users/Soiha/**)",
+      "Read(//c/vcpkg/**)",
+      "Bash(./vcpkg install:*)",
+      "Bash(./vcpkg integrate:*)",
+      "Bash(VCPKG_ROOT=/c/vcpkg cmake:*)",
+      "Bash(git reset:*)",
+      "Bash(git commit:*)",
+      "Bash(\"./cmake-build-debug/Release/layer_transparency_demo.exe\")",
+      "Bash(find:*)",
+      "Bash(./vcpkg list:*)",
+      "Bash(\"./cmake-build-debug/Release/vulkan_test.exe\")",
+      "Bash(./vcpkg search:*)",
+      "WebSearch",
+      "WebFetch(domain:github.com)",
+      "Bash(glslc:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

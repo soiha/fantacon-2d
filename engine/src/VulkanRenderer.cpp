@@ -100,6 +100,32 @@ bool VulkanRenderer::init(const std::string& title, int width, int height) {
         return false;
     }
 
+    // Create 2D rendering pipeline
+    if (!createDescriptorSetLayout()) {
+        std::cerr << "Failed to create descriptor set layout" << std::endl;
+        return false;
+    }
+
+    if (!createGraphicsPipeline()) {
+        std::cerr << "Failed to create graphics pipeline" << std::endl;
+        return false;
+    }
+
+    if (!createDescriptorPool()) {
+        std::cerr << "Failed to create descriptor pool" << std::endl;
+        return false;
+    }
+
+    if (!createUniformBuffers()) {
+        std::cerr << "Failed to create uniform buffers" << std::endl;
+        return false;
+    }
+
+    if (!createQuadBuffers()) {
+        std::cerr << "Failed to create quad buffers" << std::endl;
+        return false;
+    }
+
     std::cout << "Vulkan renderer initialized successfully" << std::endl;
     return true;
 }
@@ -107,6 +133,46 @@ bool VulkanRenderer::init(const std::string& title, int width, int height) {
 void VulkanRenderer::shutdown() {
     if (device_ != VK_NULL_HANDLE) {
         vkDeviceWaitIdle(device_);
+
+        // Destroy texture cache
+        for (auto& pair : textureCache_) {
+            destroyVulkanTexture(pair.second);
+        }
+        textureCache_.clear();
+
+        // Destroy quad buffers
+        if (quadIndexBuffer_ != VK_NULL_HANDLE)
+            vkDestroyBuffer(device_, quadIndexBuffer_, nullptr);
+        if (quadIndexBufferMemory_ != VK_NULL_HANDLE)
+            vkFreeMemory(device_, quadIndexBufferMemory_, nullptr);
+        if (quadVertexBuffer_ != VK_NULL_HANDLE)
+            vkDestroyBuffer(device_, quadVertexBuffer_, nullptr);
+        if (quadVertexBufferMemory_ != VK_NULL_HANDLE)
+            vkFreeMemory(device_, quadVertexBufferMemory_, nullptr);
+
+        // Destroy uniform buffers
+        for (size_t i = 0; i < uniformBuffers_.size(); i++) {
+            if (uniformBuffers_[i] != VK_NULL_HANDLE)
+                vkDestroyBuffer(device_, uniformBuffers_[i], nullptr);
+            if (uniformBuffersMemory_[i] != VK_NULL_HANDLE)
+                vkFreeMemory(device_, uniformBuffersMemory_[i], nullptr);
+        }
+
+        // Destroy descriptor pool
+        if (descriptorPool_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+
+        // Destroy graphics pipeline
+        if (graphicsPipeline_ != VK_NULL_HANDLE)
+            vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
+
+        // Destroy pipeline layout
+        if (pipelineLayout_ != VK_NULL_HANDLE)
+            vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+
+        // Destroy descriptor set layout
+        if (descriptorSetLayout_ != VK_NULL_HANDLE)
+            vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
 
         // Destroy sync objects
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -925,6 +991,130 @@ bool VulkanRenderer::createGraphicsPipeline() {
     return true;
 }
 
+bool VulkanRenderer::createDescriptorPool() {
+    // Create a large pool to handle many textures
+    std::array<VkDescriptorPoolSize, 2> poolSizes{};
+    poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
+    poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    poolSizes[1].descriptorCount = 1000;  // Support up to 1000 unique textures
+
+    VkDescriptorPoolCreateInfo poolInfo{};
+    poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes = poolSizes.data();
+    poolInfo.maxSets = 1000 + MAX_FRAMES_IN_FLIGHT;
+
+    if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
+        std::cerr << "Failed to create descriptor pool!" << std::endl;
+        return false;
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::createUniformBuffers() {
+    VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+
+    uniformBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffersMemory_.resize(MAX_FRAMES_IN_FLIGHT);
+    uniformBuffersMapped_.resize(MAX_FRAMES_IN_FLIGHT);
+
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        if (!createBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         uniformBuffers_[i], uniformBuffersMemory_[i])) {
+            return false;
+        }
+
+        // Map the buffer memory so we can update it later
+        vkMapMemory(device_, uniformBuffersMemory_[i], 0, bufferSize, 0, &uniformBuffersMapped_[i]);
+    }
+
+    return true;
+}
+
+bool VulkanRenderer::createQuadBuffers() {
+    // Define a unit quad (0,0 to 1,1) that we'll transform per sprite
+    std::vector<Vertex2D> vertices = {
+        {{0.0f, 0.0f}, {0.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}},  // Top-left
+        {{1.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f, 1.0f, 1.0f}},  // Top-right
+        {{1.0f, 1.0f}, {1.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}},  // Bottom-right
+        {{0.0f, 1.0f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f, 1.0f}}   // Bottom-left
+    };
+
+    std::vector<uint16_t> indices = {
+        0, 1, 2,  // First triangle
+        2, 3, 0   // Second triangle
+    };
+
+    VkDeviceSize vertexBufferSize = sizeof(vertices[0]) * vertices.size();
+    VkDeviceSize indexBufferSize = sizeof(indices[0]) * indices.size();
+
+    // Create staging buffers
+    VkBuffer vertexStagingBuffer, indexStagingBuffer;
+    VkDeviceMemory vertexStagingBufferMemory, indexStagingBufferMemory;
+
+    // Vertex staging buffer
+    if (!createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     vertexStagingBuffer, vertexStagingBufferMemory)) {
+        return false;
+    }
+
+    void* data;
+    vkMapMemory(device_, vertexStagingBufferMemory, 0, vertexBufferSize, 0, &data);
+    memcpy(data, vertices.data(), (size_t)vertexBufferSize);
+    vkUnmapMemory(device_, vertexStagingBufferMemory);
+
+    // Create vertex buffer
+    if (!createBuffer(vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                     quadVertexBuffer_, quadVertexBufferMemory_)) {
+        return false;
+    }
+
+    copyBuffer(vertexStagingBuffer, quadVertexBuffer_, vertexBufferSize);
+
+    // Index staging buffer
+    if (!createBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     indexStagingBuffer, indexStagingBufferMemory)) {
+        return false;
+    }
+
+    vkMapMemory(device_, indexStagingBufferMemory, 0, indexBufferSize, 0, &data);
+    memcpy(data, indices.data(), (size_t)indexBufferSize);
+    vkUnmapMemory(device_, indexStagingBufferMemory);
+
+    // Create index buffer
+    if (!createBuffer(indexBufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+                     VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                     quadIndexBuffer_, quadIndexBufferMemory_)) {
+        return false;
+    }
+
+    copyBuffer(indexStagingBuffer, quadIndexBuffer_, indexBufferSize);
+
+    // Clean up staging buffers
+    vkDestroyBuffer(device_, indexStagingBuffer, nullptr);
+    vkFreeMemory(device_, indexStagingBufferMemory, nullptr);
+    vkDestroyBuffer(device_, vertexStagingBuffer, nullptr);
+    vkFreeMemory(device_, vertexStagingBufferMemory, nullptr);
+
+    return true;
+}
+
+void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
+    UniformBufferObject ubo{};
+    // Create orthographic projection matrix (0,0 at top-left, like SDL)
+    ubo.projection = glm::ortho(0.0f, static_cast<float>(windowWidth_),
+                               static_cast<float>(windowHeight_), 0.0f,
+                               -1.0f, 1.0f);
+
+    memcpy(uniformBuffersMapped_[currentImage], &ubo, sizeof(ubo));
+}
+
 // ============================================================================
 // Shader Loading
 // ============================================================================
@@ -1210,6 +1400,146 @@ void VulkanRenderer::copyBufferToImage(VkBuffer buffer, VkImage image, uint32_t 
     vkQueueWaitIdle(graphicsQueue_);
 
     vkFreeCommandBuffers(device_, commandPool_, 1, &commandBuffer);
+}
+
+// ============================================================================
+// Texture Management
+// ============================================================================
+
+bool VulkanRenderer::createTextureFromPixels(const Color* pixels, int width, int height, VulkanTexture& vkTexture) {
+    VkDeviceSize imageSize = width * height * 4;  // 4 bytes per pixel (RGBA)
+
+    // Create staging buffer
+    VkBuffer stagingBuffer;
+    VkDeviceMemory stagingBufferMemory;
+    if (!createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                     stagingBuffer, stagingBufferMemory)) {
+        return false;
+    }
+
+    void* data;
+    vkMapMemory(device_, stagingBufferMemory, 0, imageSize, 0, &data);
+    memcpy(data, pixels, static_cast<size_t>(imageSize));
+    vkUnmapMemory(device_, stagingBufferMemory);
+
+    // Create image
+    if (!createImage(width, height, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL,
+                    VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                    VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vkTexture.image, vkTexture.memory)) {
+        vkDestroyBuffer(device_, stagingBuffer, nullptr);
+        vkFreeMemory(device_, stagingBufferMemory, nullptr);
+        return false;
+    }
+
+    // Transition image layout and copy buffer
+    transitionImageLayout(vkTexture.image, VK_FORMAT_R8G8B8A8_UNORM,
+                         VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    copyBufferToImage(stagingBuffer, vkTexture.image, static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+    transitionImageLayout(vkTexture.image, VK_FORMAT_R8G8B8A8_UNORM,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+    // Clean up staging buffer
+    vkDestroyBuffer(device_, stagingBuffer, nullptr);
+    vkFreeMemory(device_, stagingBufferMemory, nullptr);
+
+    // Create image view
+    vkTexture.imageView = createImageView(vkTexture.image, VK_FORMAT_R8G8B8A8_UNORM);
+    if (vkTexture.imageView == VK_NULL_HANDLE) {
+        return false;
+    }
+
+    // Create sampler
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_NEAREST;  // Pixel-perfect for retro 2D
+    samplerInfo.minFilter = VK_FILTER_NEAREST;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+    if (vkCreateSampler(device_, &samplerInfo, nullptr, &vkTexture.sampler) != VK_SUCCESS) {
+        std::cerr << "Failed to create texture sampler!" << std::endl;
+        return false;
+    }
+
+    // Create descriptor set for this texture
+    VkDescriptorSetAllocateInfo allocInfo{};
+    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    allocInfo.descriptorPool = descriptorPool_;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts = &descriptorSetLayout_;
+
+    if (vkAllocateDescriptorSets(device_, &allocInfo, &vkTexture.descriptorSet) != VK_SUCCESS) {
+        std::cerr << "Failed to allocate descriptor set for texture!" << std::endl;
+        return false;
+    }
+
+    // Update descriptor set
+    VkDescriptorImageInfo imageInfo{};
+    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    imageInfo.imageView = vkTexture.imageView;
+    imageInfo.sampler = vkTexture.sampler;
+
+    VkWriteDescriptorSet descriptorWrite{};
+    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWrite.dstSet = vkTexture.descriptorSet;
+    descriptorWrite.dstBinding = 1;  // Texture binding
+    descriptorWrite.dstArrayElement = 0;
+    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    descriptorWrite.descriptorCount = 1;
+    descriptorWrite.pImageInfo = &imageInfo;
+
+    vkUpdateDescriptorSets(device_, 1, &descriptorWrite, 0, nullptr);
+
+    vkTexture.width = width;
+    vkTexture.height = height;
+
+    return true;
+}
+
+VulkanRenderer::VulkanTexture* VulkanRenderer::getOrCreateVulkanTexture(Texture* texture) {
+    if (!texture || !texture->isValid()) {
+        return nullptr;
+    }
+
+    void* handle = texture->getHandle();
+
+    // Check if already in cache
+    auto it = textureCache_.find(handle);
+    if (it != textureCache_.end()) {
+        return &it->second;
+    }
+
+    // Create new Vulkan texture
+    // For now, we'll need to load the texture data from the SDL texture
+    // This is a simplified version - in production you'd want to handle this better
+    std::cerr << "Warning: Texture not in Vulkan cache, creating on-demand (not yet implemented)" << std::endl;
+    return nullptr;
+}
+
+void VulkanRenderer::destroyVulkanTexture(VulkanTexture& vkTexture) {
+    if (vkTexture.sampler != VK_NULL_HANDLE) {
+        vkDestroySampler(device_, vkTexture.sampler, nullptr);
+        vkTexture.sampler = VK_NULL_HANDLE;
+    }
+    if (vkTexture.imageView != VK_NULL_HANDLE) {
+        vkDestroyImageView(device_, vkTexture.imageView, nullptr);
+        vkTexture.imageView = VK_NULL_HANDLE;
+    }
+    if (vkTexture.image != VK_NULL_HANDLE) {
+        vkDestroyImage(device_, vkTexture.image, nullptr);
+        vkTexture.image = VK_NULL_HANDLE;
+    }
+    if (vkTexture.memory != VK_NULL_HANDLE) {
+        vkFreeMemory(device_, vkTexture.memory, nullptr);
+        vkTexture.memory = VK_NULL_HANDLE;
+    }
 }
 
 } // namespace Engine

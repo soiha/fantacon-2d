@@ -299,10 +299,7 @@ int main(int argc, char* argv[]) {
     Engine::Engine engine;
 
     auto vulkanRenderer = std::make_unique<Engine::VulkanRenderer>();
-    if (!vulkanRenderer->init(config.title, config.width, config.height)) {
-        LOG_ERROR("Failed to initialize VulkanRenderer!");
-        return 1;
-    }
+    // Note: Don't call init() here - engine.init() will do it!
 
     if (!engine.init(config, std::move(vulkanRenderer))) {
         LOG_ERROR("Failed to initialize engine!");

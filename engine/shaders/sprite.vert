@@ -22,6 +22,7 @@ layout(push_constant) uniform PushConstants {
 
 void main() {
     gl_Position = ubo.projection * pushConstants.model * vec4(inPosition, 0.0, 1.0);
-    fragTexCoord = inTexCoord;
+    // Flip Y texture coordinate for Vulkan (textures are stored with origin at top-left)
+    fragTexCoord = vec2(inTexCoord.x, 1.0 - inTexCoord.y);
     fragColor = inColor * pushConstants.tintColor;
 }

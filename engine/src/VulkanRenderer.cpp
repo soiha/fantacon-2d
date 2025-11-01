@@ -588,12 +588,18 @@ void VulkanRenderer::renderPixelBuffer(const PixelBuffer& buffer, const Vec2& la
 }
 
 void VulkanRenderer::renderIndexedPixelBuffer(const IndexedPixelBuffer& buffer, const Vec2& layerOffset, float opacity) {
-    if (!buffer.isVisible() || !buffer.getTexture()) {
+    if (!buffer.isVisible()) {
         return;
     }
 
     // Upload pixels if dirty (converts indexed colors to RGBA using palette)
+    // This creates the texture if it doesn't exist yet!
     const_cast<IndexedPixelBuffer&>(buffer).upload(*this);
+
+    // Now check if texture was created successfully
+    if (!buffer.getTexture()) {
+        return;
+    }
 
     // Begin frame if not already started
     if (!beginFrame()) {
@@ -680,17 +686,52 @@ void VulkanRenderer::updateTexture(Texture& texture, const Color* pixels, int wi
 
     VulkanTexture& vkTexture = it->second;
 
-    // If texture already exists and dimensions match, we can update it
-    // Otherwise, destroy and recreate
-    if (vkTexture.image != VK_NULL_HANDLE) {
-        if (vkTexture.width != width || vkTexture.height != height) {
-            // Dimensions changed, need to recreate
-            destroyVulkanTexture(vkTexture);
-            vkTexture = VulkanTexture{};  // Reset
+    // If texture already exists and dimensions match, just update the pixel data
+    if (vkTexture.image != VK_NULL_HANDLE && vkTexture.width == width && vkTexture.height == height) {
+        // Fast path: Update existing texture pixels without recreating resources
+        VkDeviceSize imageSize = width * height * 4;  // 4 bytes per pixel (RGBA)
+
+        // Create staging buffer for new pixel data
+        VkBuffer stagingBuffer;
+        VkDeviceMemory stagingBufferMemory;
+        if (!createBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                         VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+                         stagingBuffer, stagingBufferMemory)) {
+            LOG_ERROR("Failed to create staging buffer for texture update");
+            return;
         }
+
+        // Copy pixel data to staging buffer
+        void* data;
+        vkMapMemory(device_, stagingBufferMemory, 0, imageSize, 0, &data);
+        memcpy(data, pixels, static_cast<size_t>(imageSize));
+        vkUnmapMemory(device_, stagingBufferMemory);
+
+        // Transition image to transfer destination layout
+        transitionImageLayout(vkTexture.image, VK_FORMAT_R8G8B8A8_UNORM,
+                             VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+
+        // Copy buffer to image
+        copyBufferToImage(stagingBuffer, vkTexture.image, static_cast<uint32_t>(width), static_cast<uint32_t>(height));
+
+        // Transition back to shader read layout
+        transitionImageLayout(vkTexture.image, VK_FORMAT_R8G8B8A8_UNORM,
+                             VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        // Clean up staging buffer
+        vkDestroyBuffer(device_, stagingBuffer, nullptr);
+        vkFreeMemory(device_, stagingBufferMemory, nullptr);
+        return;
     }
 
-    // Create or update the texture from pixels
+    // Slow path: Dimensions changed or texture doesn't exist - recreate everything
+    if (vkTexture.image != VK_NULL_HANDLE) {
+        // Destroy old texture resources
+        destroyVulkanTexture(vkTexture);
+        vkTexture = VulkanTexture{};  // Reset
+    }
+
+    // Create new texture from pixels
     if (!createTextureFromPixels(pixels, width, height, vkTexture)) {
         LOG_ERROR("Failed to create/update Vulkan texture from pixels");
     }
@@ -1231,7 +1272,7 @@ bool VulkanRenderer::createGraphicsPipeline() {
     inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     inputAssembly.primitiveRestartEnable = VK_FALSE;
 
-    // Viewport and scissor
+    // Viewport and scissor (standard setup first, we'll fix orientation separately)
     VkViewport viewport{};
     viewport.x = 0.0f;
     viewport.y = 0.0f;
@@ -1340,18 +1381,19 @@ bool VulkanRenderer::createGraphicsPipeline() {
 }
 
 bool VulkanRenderer::createDescriptorPool() {
-    // Create a large pool to handle many textures
+    // Create a very large pool to handle many textures
+    // Note: Textures get recreated frequently for animated content, so we need a large pool
     std::array<VkDescriptorPoolSize, 2> poolSizes{};
     poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     poolSizes[0].descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT);
     poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    poolSizes[1].descriptorCount = 1000;  // Support up to 1000 unique textures
+    poolSizes[1].descriptorCount = 50000;  // Large pool for frequently recreated textures
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
     poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
     poolInfo.pPoolSizes = poolSizes.data();
-    poolInfo.maxSets = 1000 + MAX_FRAMES_IN_FLIGHT;
+    poolInfo.maxSets = 50000 + MAX_FRAMES_IN_FLIGHT;
 
     if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS) {
         LOG_ERROR("Failed to create descriptor pool");
@@ -1487,14 +1529,11 @@ bool VulkanRenderer::createQuadBuffers() {
 
 void VulkanRenderer::updateUniformBuffer(uint32_t currentImage) {
     UniformBufferObject ubo{};
-    // Create orthographic projection matrix (0,0 at top-left, like SDL)
+    // SDL coordinates: (0,0) at top-left, Y increases downward
+    // Create orthographic projection matrix matching SDL coordinate system
     ubo.projection = glm::ortho(0.0f, static_cast<float>(windowWidth_),
                                static_cast<float>(windowHeight_), 0.0f,
                                -1.0f, 1.0f);
-
-    // Vulkan's clip space Y axis is inverted compared to OpenGL
-    // Flip the Y component to match SDL/OpenGL coordinate system
-    ubo.projection[1][1] *= -1.0f;
 
     memcpy(uniformBuffersMapped_[currentImage], &ubo, sizeof(ubo));
 }
@@ -1724,6 +1763,12 @@ void VulkanRenderer::transitionImageLayout(VkImage image, VkFormat format,
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
         sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    } else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+        // Transition from shader read to transfer dst for updating existing textures
+        barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
     } else {
         LOG_ERROR("Unsupported layout transition");
         return;
@@ -1908,6 +1953,11 @@ VulkanRenderer::VulkanTexture* VulkanRenderer::getOrCreateVulkanTexture(Texture*
 }
 
 void VulkanRenderer::destroyVulkanTexture(VulkanTexture& vkTexture) {
+    // Don't destroy if device is already null (renderer is being destroyed)
+    if (device_ == VK_NULL_HANDLE) {
+        return;
+    }
+
     if (vkTexture.sampler != VK_NULL_HANDLE) {
         vkDestroySampler(device_, vkTexture.sampler, nullptr);
         vkTexture.sampler = VK_NULL_HANDLE;
